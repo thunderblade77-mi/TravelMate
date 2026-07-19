@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useState,
   type FormEvent,
 } from 'react'
@@ -19,68 +18,22 @@ import ProfilePage from './components/profile/ProfilePage'
 import RoadbookPage from './components/roadbook/RoadbookPage'
 import TripsPage from './components/trips/TripsPage'
 
-import type { Trip } from './types/travel'
-
-const TRIPS_STORAGE_KEY = 'travelmate-trips'
-const ACTIVE_TRIP_STORAGE_KEY = 'travelmate-active-trip-id'
-
-function loadTrips(): Trip[] {
-  try {
-    const savedTrips = localStorage.getItem(TRIPS_STORAGE_KEY)
-
-    if (!savedTrips) {
-      return []
-    }
-
-    const parsedTrips: unknown = JSON.parse(savedTrips)
-
-    return Array.isArray(parsedTrips)
-      ? (parsedTrips as Trip[])
-      : []
-  } catch {
-    return []
-  }
-}
-
-function loadActiveTripId(): string | null {
-  try {
-    return localStorage.getItem(
-      ACTIVE_TRIP_STORAGE_KEY,
-    )
-  } catch {
-    return null
-  }
-}
-
-function formatDate(date: string): string {
-  if (!date) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('it-IT', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(`${date}T12:00:00`))
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('it-IT', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
+import { useTrips } from './hooks/useTrips'
+import {
+  formatCurrency,
+  formatDate,
+} from './utils/format'
 
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [trips, setTrips] = useState<Trip[]>(loadTrips)
-
-  const [activeTripId, setActiveTripId] = useState<
-    string | null
-  >(loadActiveTripId)
+  const {
+    trips,
+    activeTrip,
+    createTrip,
+    selectTrip,
+  } = useTrips()
 
   const [destination, setDestination] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -88,57 +41,6 @@ export default function App() {
   const [travelers, setTravelers] = useState(1)
   const [budget, setBudget] = useState('')
   const [transport, setTransport] = useState('Auto')
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        TRIPS_STORAGE_KEY,
-        JSON.stringify(trips),
-      )
-    } catch {
-      // L'app continua a funzionare anche senza localStorage.
-    }
-  }, [trips])
-
-  useEffect(() => {
-    try {
-      if (activeTripId) {
-        localStorage.setItem(
-          ACTIVE_TRIP_STORAGE_KEY,
-          activeTripId,
-        )
-      } else {
-        localStorage.removeItem(
-          ACTIVE_TRIP_STORAGE_KEY,
-        )
-      }
-    } catch {
-      // L'app continua a funzionare anche senza localStorage.
-    }
-  }, [activeTripId])
-
-  useEffect(() => {
-    if (trips.length === 0) {
-      if (activeTripId !== null) {
-        setActiveTripId(null)
-      }
-
-      return
-    }
-
-    const activeTripExists = trips.some(
-      (trip) => trip.id === activeTripId,
-    )
-
-    if (!activeTripExists) {
-      setActiveTripId(trips[0].id)
-    }
-  }, [trips, activeTripId])
-
-  const activeTrip =
-    trips.find((trip) => trip.id === activeTripId) ??
-    trips[0] ??
-    null
 
   function resetTripForm() {
     setDestination('')
@@ -153,7 +55,7 @@ export default function App() {
     navigate('/trips/new')
   }
 
-  function createTrip(
+  function handleCreateTrip(
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
@@ -168,28 +70,21 @@ export default function App() {
       return
     }
 
-    const newTrip: Trip = {
-      id: crypto.randomUUID(),
+    createTrip({
       destination: cleanDestination,
       startDate,
       endDate,
-      travelers: Math.max(1, travelers),
-      budget: Math.max(0, Number(budget) || 0),
+      travelers,
+      budget: Number(budget) || 0,
       transport,
-    }
+    })
 
-    setTrips((currentTrips) => [
-      newTrip,
-      ...currentTrips,
-    ])
-
-    setActiveTripId(newTrip.id)
     resetTripForm()
     navigate('/')
   }
 
-  function selectTrip(tripId: string) {
-    setActiveTripId(tripId)
+  function handleSelectTrip(tripId: string) {
+    selectTrip(tripId)
     navigate('/')
   }
 
@@ -269,7 +164,7 @@ export default function App() {
                   onBudgetChange={setBudget}
                   onTransportChange={setTransport}
                   onBack={() => navigate('/')}
-                  onSubmit={createTrip}
+                  onSubmit={handleCreateTrip}
                 />
               }
             />
@@ -281,7 +176,7 @@ export default function App() {
                   trips={trips}
                   activeTrip={activeTrip}
                   onCreateTrip={openCreateTripPage}
-                  onSelectTrip={selectTrip}
+                  onSelectTrip={handleSelectTrip}
                   formatDate={formatDate}
                   formatCurrency={formatCurrency}
                 />
