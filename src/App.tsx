@@ -1,12 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from 'react'
+
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 
 import CreateTripPage from './components/create-trip/CreateTripPage'
 import HomePage from './components/home/HomePage'
 import MapPage from './components/map/MapPage'
 import ProfilePage from './components/profile/ProfilePage'
+import RoadbookPage from './components/roadbook/RoadbookPage'
 import TripsPage from './components/trips/TripsPage'
 
-import type { Page, Trip } from './types/travel'
+import type { Trip } from './types/travel'
 
 const TRIPS_STORAGE_KEY = 'travelmate-trips'
 const ACTIVE_TRIP_STORAGE_KEY = 'travelmate-active-trip-id'
@@ -21,7 +34,9 @@ function loadTrips(): Trip[] {
 
     const parsedTrips: unknown = JSON.parse(savedTrips)
 
-    return Array.isArray(parsedTrips) ? (parsedTrips as Trip[]) : []
+    return Array.isArray(parsedTrips)
+      ? (parsedTrips as Trip[])
+      : []
   } catch {
     return []
   }
@@ -29,7 +44,9 @@ function loadTrips(): Trip[] {
 
 function loadActiveTripId(): string | null {
   try {
-    return localStorage.getItem(ACTIVE_TRIP_STORAGE_KEY)
+    return localStorage.getItem(
+      ACTIVE_TRIP_STORAGE_KEY,
+    )
   } catch {
     return null
   }
@@ -56,11 +73,14 @@ function formatCurrency(amount: number): string {
 }
 
 export default function App() {
-  const [page, setPage] = useState<Page>('home')
+  const navigate = useNavigate()
+  const location = useLocation()
+
   const [trips, setTrips] = useState<Trip[]>(loadTrips)
-  const [activeTripId, setActiveTripId] = useState<string | null>(
-    loadActiveTripId,
-  )
+
+  const [activeTripId, setActiveTripId] = useState<
+    string | null
+  >(loadActiveTripId)
 
   const [destination, setDestination] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -71,21 +91,29 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(TRIPS_STORAGE_KEY, JSON.stringify(trips))
+      localStorage.setItem(
+        TRIPS_STORAGE_KEY,
+        JSON.stringify(trips),
+      )
     } catch {
-      // L'app continua a funzionare anche se localStorage non è disponibile.
+      // L'app continua a funzionare anche senza localStorage.
     }
   }, [trips])
 
   useEffect(() => {
     try {
       if (activeTripId) {
-        localStorage.setItem(ACTIVE_TRIP_STORAGE_KEY, activeTripId)
+        localStorage.setItem(
+          ACTIVE_TRIP_STORAGE_KEY,
+          activeTripId,
+        )
       } else {
-        localStorage.removeItem(ACTIVE_TRIP_STORAGE_KEY)
+        localStorage.removeItem(
+          ACTIVE_TRIP_STORAGE_KEY,
+        )
       }
     } catch {
-      // L'app continua a funzionare anche se localStorage non è disponibile.
+      // L'app continua a funzionare anche senza localStorage.
     }
   }, [activeTripId])
 
@@ -122,10 +150,12 @@ export default function App() {
   }
 
   function openCreateTripPage() {
-    setPage('create-trip')
+    navigate('/trips/new')
   }
 
-  function createTrip(event: FormEvent<HTMLFormElement>) {
+  function createTrip(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault()
 
     const cleanDestination = destination.trim()
@@ -148,16 +178,31 @@ export default function App() {
       transport,
     }
 
-    setTrips((currentTrips) => [newTrip, ...currentTrips])
+    setTrips((currentTrips) => [
+      newTrip,
+      ...currentTrips,
+    ])
+
     setActiveTripId(newTrip.id)
     resetTripForm()
-    setPage('home')
+    navigate('/')
   }
 
   function selectTrip(tripId: string) {
     setActiveTripId(tripId)
-    setPage('home')
+    navigate('/')
   }
+
+  const isHomeRoute = location.pathname === '/'
+
+  const isTripsRoute =
+    location.pathname === '/trips' ||
+    location.pathname === '/trips/new'
+
+  const isMapRoute = location.pathname === '/map'
+
+  const isProfileRoute =
+    location.pathname === '/profile'
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -166,7 +211,7 @@ export default function App() {
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setPage('home')}
+              onClick={() => navigate('/')}
               className="text-left"
             >
               <p className="text-xl font-bold tracking-tight">
@@ -190,57 +235,92 @@ export default function App() {
         </header>
 
         <main className="flex-1 px-5 pb-28 pt-6">
-          {page === 'home' && (
-            <HomePage
-              activeTrip={activeTrip}
-              onCreateTrip={openCreateTripPage}
-              onOpenMap={() => setPage('map')}
-              formatDate={formatDate}
-              formatCurrency={formatCurrency}
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  activeTrip={activeTrip}
+                  onCreateTrip={openCreateTripPage}
+                  onOpenRoadbook={() =>
+                    navigate('/roadbook')
+                  }
+                  onOpenMap={() => navigate('/map')}
+                  formatDate={formatDate}
+                  formatCurrency={formatCurrency}
+                />
+              }
             />
-          )}
 
-          {page === 'create-trip' && (
-            <CreateTripPage
-              destination={destination}
-              startDate={startDate}
-              endDate={endDate}
-              travelers={travelers}
-              budget={budget}
-              transport={transport}
-              onDestinationChange={setDestination}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-              onTravelersChange={setTravelers}
-              onBudgetChange={setBudget}
-              onTransportChange={setTransport}
-              onBack={() => setPage('home')}
-              onSubmit={createTrip}
+            <Route
+              path="/trips/new"
+              element={
+                <CreateTripPage
+                  destination={destination}
+                  startDate={startDate}
+                  endDate={endDate}
+                  travelers={travelers}
+                  budget={budget}
+                  transport={transport}
+                  onDestinationChange={setDestination}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                  onTravelersChange={setTravelers}
+                  onBudgetChange={setBudget}
+                  onTransportChange={setTransport}
+                  onBack={() => navigate('/')}
+                  onSubmit={createTrip}
+                />
+              }
             />
-          )}
 
-          {page === 'trips' && (
-            <TripsPage
-              trips={trips}
-              activeTrip={activeTrip}
-              onCreateTrip={openCreateTripPage}
-              onSelectTrip={selectTrip}
-              formatDate={formatDate}
-              formatCurrency={formatCurrency}
+            <Route
+              path="/trips"
+              element={
+                <TripsPage
+                  trips={trips}
+                  activeTrip={activeTrip}
+                  onCreateTrip={openCreateTripPage}
+                  onSelectTrip={selectTrip}
+                  formatDate={formatDate}
+                  formatCurrency={formatCurrency}
+                />
+              }
             />
-          )}
 
-          {page === 'map' && <MapPage />}
+            <Route
+              path="/roadbook"
+              element={
+                <RoadbookPage
+                  activeTrip={activeTrip}
+                  onBack={() => navigate('/')}
+                />
+              }
+            />
 
-          {page === 'profile' && <ProfilePage trips={trips} />}
+            <Route
+              path="/map"
+              element={<MapPage />}
+            />
+
+            <Route
+              path="/profile"
+              element={<ProfilePage trips={trips} />}
+            />
+
+            <Route
+              path="*"
+              element={<Navigate to="/" replace />}
+            />
+          </Routes>
         </main>
 
         <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
           <button
             type="button"
-            onClick={() => setPage('home')}
+            onClick={() => navigate('/')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
-              page === 'home'
+              isHomeRoute
                 ? 'text-blue-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
@@ -251,9 +331,9 @@ export default function App() {
 
           <button
             type="button"
-            onClick={() => setPage('trips')}
+            onClick={() => navigate('/trips')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
-              page === 'trips' || page === 'create-trip'
+              isTripsRoute
                 ? 'text-blue-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
@@ -264,9 +344,9 @@ export default function App() {
 
           <button
             type="button"
-            onClick={() => setPage('map')}
+            onClick={() => navigate('/map')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
-              page === 'map'
+              isMapRoute
                 ? 'text-blue-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
@@ -277,9 +357,9 @@ export default function App() {
 
           <button
             type="button"
-            onClick={() => setPage('profile')}
+            onClick={() => navigate('/profile')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
-              page === 'profile'
+              isProfileRoute
                 ? 'text-blue-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
