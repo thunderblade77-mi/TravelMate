@@ -21,7 +21,7 @@ import ProfilePage from './components/profile/ProfilePage'
 import RoadbookPage from './components/roadbook/RoadbookPage'
 import TripsPage from './components/trips/TripsPage'
 import WeatherPage from './components/weather/WeatherPage'
-
+import AssistantPage from './components/assistant/AssistantPage'
 import { useTrips } from './hooks/useTrips'
 import { geocodeDestination } from './services/geocoding'
 import {
@@ -123,8 +123,8 @@ export default function App() {
   const isWeatherRoute =
     location.pathname === '/weather'
 
-  const isProfileRoute =
-    location.pathname === '/profile'
+  const isAssistantRoute =
+  location.pathname === '/assistant'
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -280,7 +280,14 @@ export default function App() {
                 <ProfilePage trips={trips} />
               }
             />
-
+<Route
+  path="/assistant"
+  element={
+    <AssistantPage
+      activeTrip={activeTrip}
+    />
+  }
+/>
             <Route
               path="*"
               element={
@@ -293,7 +300,7 @@ export default function App() {
         <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/assistant')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isHomeRoute
                 ? 'text-blue-600'
@@ -353,22 +360,20 @@ export default function App() {
             Meteo
           </button>
 
-          <button
-            type="button"
-            onClick={() =>
-              navigate('/profile')
-            }
-            className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
-              isProfileRoute
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <span className="text-xl">
-              👤
-            </span>
-            Profilo
-          </button>
+<button
+  type="button"
+  onClick={() => navigate('/assistant')}
+  className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
+    isAssistantRoute
+      ? 'text-blue-600'
+      : 'text-slate-500 hover:text-slate-900'
+  }`}
+>
+  <span className="text-xl">
+    ✨
+  </span>
+  Assistente
+</button>
         </nav>
       </div>
     </div>
