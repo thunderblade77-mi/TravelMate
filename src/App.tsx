@@ -11,14 +11,19 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
+import ChecklistPage from './components/checklist/ChecklistPage'
 import CreateTripPage from './components/create-trip/CreateTripPage'
+import DocumentsPage from './components/documents/DocumentsPage'
+import ExpensesPage from './components/expenses/ExpensesPage'
 import HomePage from './components/home/HomePage'
 import MapPage from './components/map/MapPage'
 import ProfilePage from './components/profile/ProfilePage'
 import RoadbookPage from './components/roadbook/RoadbookPage'
 import TripsPage from './components/trips/TripsPage'
+import WeatherPage from './components/weather/WeatherPage'
 
 import { useTrips } from './hooks/useTrips'
+import { geocodeDestination } from './services/geocoding'
 import {
   formatCurrency,
   formatDate,
@@ -40,7 +45,8 @@ export default function App() {
   const [endDate, setEndDate] = useState('')
   const [travelers, setTravelers] = useState(1)
   const [budget, setBudget] = useState('')
-  const [transport, setTransport] = useState('Auto')
+  const [transport, setTransport] =
+    useState('Auto')
 
   function resetTripForm() {
     setDestination('')
@@ -55,20 +61,35 @@ export default function App() {
     navigate('/trips/new')
   }
 
-  function handleCreateTrip(
+  function openMapPoint(mapPointId: string) {
+    navigate('/map', {
+      state: {
+        mapPointId,
+      },
+    })
+  }
+
+  async function handleCreateTrip(
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
 
     const cleanDestination = destination.trim()
 
-    if (!cleanDestination || !startDate || !endDate) {
+    if (
+      !cleanDestination ||
+      !startDate ||
+      !endDate
+    ) {
       return
     }
 
     if (endDate < startDate) {
       return
     }
+
+    const coordinates =
+      await geocodeDestination(cleanDestination)
 
     createTrip({
       destination: cleanDestination,
@@ -77,6 +98,8 @@ export default function App() {
       travelers,
       budget: Number(budget) || 0,
       transport,
+      latitude: coordinates?.latitude,
+      longitude: coordinates?.longitude,
     })
 
     resetTripForm()
@@ -94,7 +117,11 @@ export default function App() {
     location.pathname === '/trips' ||
     location.pathname === '/trips/new'
 
-  const isMapRoute = location.pathname === '/map'
+  const isMapRoute =
+    location.pathname === '/map'
+
+  const isWeatherRoute =
+    location.pathname === '/weather'
 
   const isProfileRoute =
     location.pathname === '/profile'
@@ -140,7 +167,12 @@ export default function App() {
                   onOpenRoadbook={() =>
                     navigate('/roadbook')
                   }
-                  onOpenMap={() => navigate('/map')}
+                  onOpenMap={() =>
+                    navigate('/map')
+                  }
+                  onOpenChecklist={() =>
+                    navigate('/checklist')
+                  }
                   formatDate={formatDate}
                   formatCurrency={formatCurrency}
                 />
@@ -157,7 +189,9 @@ export default function App() {
                   travelers={travelers}
                   budget={budget}
                   transport={transport}
-                  onDestinationChange={setDestination}
+                  onDestinationChange={
+                    setDestination
+                  }
                   onStartDateChange={setStartDate}
                   onEndDateChange={setEndDate}
                   onTravelersChange={setTravelers}
@@ -189,28 +223,74 @@ export default function App() {
                 <RoadbookPage
                   activeTrip={activeTrip}
                   onBack={() => navigate('/')}
+                  onOpenMapPoint={openMapPoint}
                 />
               }
             />
 
             <Route
               path="/map"
-              element={<MapPage />}
+              element={
+                <MapPage
+                  activeTrip={activeTrip}
+                />
+              }
+            />
+
+            <Route
+              path="/weather"
+              element={
+                <WeatherPage
+                  activeTrip={activeTrip}
+                />
+              }
+            />
+
+            <Route
+              path="/checklist"
+              element={
+                <ChecklistPage
+                  activeTrip={activeTrip}
+                />
+              }
+            />
+
+            <Route
+              path="/documents"
+              element={
+                <DocumentsPage
+                  activeTrip={activeTrip}
+                />
+              }
+            />
+
+            <Route
+              path="/expenses"
+              element={
+                <ExpensesPage
+                  activeTrip={activeTrip}
+                  formatCurrency={formatCurrency}
+                />
+              }
             />
 
             <Route
               path="/profile"
-              element={<ProfilePage trips={trips} />}
+              element={
+                <ProfilePage trips={trips} />
+              }
             />
 
             <Route
               path="*"
-              element={<Navigate to="/" replace />}
+              element={
+                <Navigate to="/" replace />
+              }
             />
           </Routes>
         </main>
 
-        <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-4 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+        <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
           <button
             type="button"
             onClick={() => navigate('/')}
@@ -220,7 +300,9 @@ export default function App() {
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span className="text-xl">🏠</span>
+            <span className="text-xl">
+              🏠
+            </span>
             Home
           </button>
 
@@ -233,7 +315,9 @@ export default function App() {
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span className="text-xl">🧳</span>
+            <span className="text-xl">
+              🧳
+            </span>
             Viaggi
           </button>
 
@@ -246,20 +330,43 @@ export default function App() {
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span className="text-xl">📍</span>
+            <span className="text-xl">
+              📍
+            </span>
             Mappa
           </button>
 
           <button
             type="button"
-            onClick={() => navigate('/profile')}
+            onClick={() =>
+              navigate('/weather')
+            }
+            className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
+              isWeatherRoute
+                ? 'text-blue-600'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <span className="text-xl">
+              🌦️
+            </span>
+            Meteo
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate('/profile')
+            }
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isProfileRoute
                 ? 'text-blue-600'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <span className="text-xl">👤</span>
+            <span className="text-xl">
+              👤
+            </span>
             Profilo
           </button>
         </nav>

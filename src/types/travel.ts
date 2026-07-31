@@ -14,4 +14,7 @@ export type Trip = {
   travelers: number
   budget: number
   transport: string
+
+  latitude?: number
+  longitude?: number
 }

@@ -13,7 +13,9 @@ import type {
 } from '../types/roadbook'
 
 export function useRoadbook(tripId: string | null) {
-  const [activities, setActivities] = useState<RoadbookActivity[]>([])
+  const [activities, setActivities] = useState<
+    RoadbookActivity[]
+  >([])
 
   const reload = useCallback(() => {
     if (!tripId) {
@@ -29,7 +31,10 @@ export function useRoadbook(tripId: string | null) {
   }, [reload])
 
   function createActivity(
-    input: Omit<CreateRoadbookActivityInput, 'tripId'>,
+    input: Omit<
+      CreateRoadbookActivityInput,
+      'tripId'
+    >,
   ) {
     if (!tripId) {
       return
@@ -43,7 +48,57 @@ export function useRoadbook(tripId: string | null) {
     reload()
   }
 
-  function toggleCompleted(activityId: string) {
+  function editActivity(
+    activityId: string,
+    input: Omit<
+      CreateRoadbookActivityInput,
+      'tripId'
+    >,
+  ) {
+    const activity = activities.find(
+      (item) => item.id === activityId,
+    )
+
+    if (!activity) {
+      return
+    }
+
+    updateActivity({
+      ...activity,
+      ...input,
+    })
+
+    reload()
+  }
+
+  function duplicateActivity(
+    activityId: string,
+  ) {
+    const activity = activities.find(
+      (item) => item.id === activityId,
+    )
+
+    if (!activity || !tripId) {
+      return
+    }
+
+    addActivity({
+      tripId,
+      dayId: activity.dayId,
+      time: activity.time,
+      title: `${activity.title} (copia)`,
+      location: activity.location,
+      notes: activity.notes,
+      category: activity.category,
+      mapPointId: activity.mapPointId,
+    })
+
+    reload()
+  }
+
+  function toggleCompleted(
+    activityId: string,
+  ) {
     const activity = activities.find(
       (item) => item.id === activityId,
     )
@@ -60,7 +115,9 @@ export function useRoadbook(tripId: string | null) {
     reload()
   }
 
-  function removeActivity(activityId: string) {
+  function removeActivity(
+    activityId: string,
+  ) {
     deleteActivity(activityId)
     reload()
   }
@@ -68,6 +125,8 @@ export function useRoadbook(tripId: string | null) {
   return {
     activities,
     createActivity,
+    editActivity,
+    duplicateActivity,
     toggleCompleted,
     removeActivity,
     reload,

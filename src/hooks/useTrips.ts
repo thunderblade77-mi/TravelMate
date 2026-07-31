@@ -16,6 +16,8 @@ type CreateTripInput = {
   travelers: number
   budget: number
   transport: string
+  latitude?: number
+  longitude?: number
 }
 
 export function useTrips() {
@@ -65,6 +67,8 @@ export function useTrips() {
       travelers: Math.max(1, input.travelers),
       budget: Math.max(0, input.budget),
       transport: input.transport,
+      latitude: input.latitude,
+      longitude: input.longitude,
     }
 
     setTrips((currentTrips) => [

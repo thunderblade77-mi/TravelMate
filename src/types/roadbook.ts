@@ -15,6 +15,7 @@ export type RoadbookActivity = {
   notes: string
   category: ActivityCategory
   completed: boolean
+  mapPointId?: string
   createdAt: string
 }
 
@@ -37,4 +38,5 @@ export type CreateRoadbookActivityInput = {
   location: string
   notes: string
   category: ActivityCategory
+  mapPointId?: string
 }
