@@ -85,11 +85,24 @@ export function useTrips() {
     setActiveTripId(tripId)
   }
 
+  function removeTrip(tripId: string): void {
+    const nextTrips = trips.filter(
+      (trip) => trip.id !== tripId,
+    )
+
+    setTrips(nextTrips)
+
+    if (activeTripId === tripId) {
+      setActiveTripId(nextTrips[0]?.id ?? null)
+    }
+  }
+
   return {
     trips,
     activeTrip,
     activeTripId,
     createTrip,
     selectTrip,
+    removeTrip,
   }
 }

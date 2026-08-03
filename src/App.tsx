@@ -38,6 +38,7 @@ export default function App() {
     activeTrip,
     createTrip,
     selectTrip,
+    removeTrip,
   } = useTrips()
 
   const [destination, setDestination] = useState('')
@@ -211,6 +212,7 @@ export default function App() {
                   activeTrip={activeTrip}
                   onCreateTrip={openCreateTripPage}
                   onSelectTrip={handleSelectTrip}
+                  onRemoveTrip={removeTrip}
                   formatDate={formatDate}
                   formatCurrency={formatCurrency}
                 />
@@ -300,7 +302,7 @@ export default function App() {
         <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
           <button
             type="button"
-            onClick={() => navigate('/assistant')}
+            onClick={() => navigate('/')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isHomeRoute
                 ? 'text-blue-600'
