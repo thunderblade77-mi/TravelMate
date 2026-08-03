@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -110,6 +111,18 @@ function UserLocationController({
   const map = useMap()
 
   useEffect(() => {
+    if (requestId === 0) {
+      return
+    }
+
+    if (!window.isSecureContext) {
+      onLocationError(
+        'La posizione richiede una connessione sicura HTTPS.',
+      )
+
+      return
+    }
+
     if (!navigator.geolocation) {
       onLocationError(
         'La geolocalizzazione non è supportata da questo dispositivo.',
@@ -118,8 +131,14 @@ function UserLocationController({
       return
     }
 
+    let cancelled = false
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (cancelled) {
+          return
+        }
+
         const userPosition: LatLngTuple = [
           position.coords.latitude,
           position.coords.longitude,
@@ -132,22 +151,26 @@ function UserLocationController({
         })
       },
       (error) => {
+        if (cancelled) {
+          return
+        }
+
         switch (error.code) {
           case error.PERMISSION_DENIED:
             onLocationError(
-              'Permesso di localizzazione negato. Puoi abilitarlo nelle impostazioni di Safari.',
+              'Permesso di localizzazione negato. Su iPhone apri Impostazioni → Privacy e sicurezza → Localizzazione → Safari Websites e scegli “Mentre usi l’app”, con “Posizione esatta” attiva.',
             )
             break
 
           case error.POSITION_UNAVAILABLE:
             onLocationError(
-              'La posizione non è momentaneamente disponibile.',
+              'La posizione non è momentaneamente disponibile. Attiva il GPS e riprova.',
             )
             break
 
           case error.TIMEOUT:
             onLocationError(
-              'La richiesta della posizione è scaduta. Riprova.',
+              'La richiesta della posizione è scaduta. Riprova all’aperto o con una connessione migliore.',
             )
             break
 
@@ -159,10 +182,14 @@ function UserLocationController({
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000,
+        timeout: 20000,
+        maximumAge: 0,
       },
     )
+
+    return () => {
+      cancelled = true
+    }
   }, [
     map,
     onLocationError,
@@ -240,7 +267,7 @@ export default function InteractiveMap({
     useState(0)
 
   const [isLocating, setIsLocating] =
-    useState(true)
+    useState(false)
 
   const [locationError, setLocationError] =
     useState<string | null>(null)
@@ -254,29 +281,32 @@ export default function InteractiveMap({
       (point) => point.id === selectedMapPointId,
     ) ?? null
 
-  function handleSelectPoint(
-    position: LatLngTuple,
-  ) {
-    setSelectedPoint(position)
-    setPointName('')
-    setPointLocation('')
-    setPointType('attraction')
-  }
+  const handleSelectPoint = useCallback(
+    (position: LatLngTuple) => {
+      setSelectedPoint(position)
+      setPointName('')
+      setPointLocation('')
+      setPointType('attraction')
+    },
+    [],
+  )
 
-  function handleLocationFound(
-    position: LatLngTuple,
-  ) {
-    setUserPosition(position)
-    setLocationError(null)
-    setIsLocating(false)
-  }
+  const handleLocationFound = useCallback(
+    (position: LatLngTuple) => {
+      setUserPosition(position)
+      setLocationError(null)
+      setIsLocating(false)
+    },
+    [],
+  )
 
-  function handleLocationError(
-    message: string,
-  ) {
-    setLocationError(message)
-    setIsLocating(false)
-  }
+  const handleLocationError = useCallback(
+    (message: string) => {
+      setLocationError(message)
+      setIsLocating(false)
+    },
+    [],
+  )
 
   function handleRequestLocation() {
     setIsLocating(true)
@@ -534,7 +564,9 @@ export default function InteractiveMap({
         >
           {isLocating
             ? 'Localizzazione...'
-            : '◎ La mia posizione'}
+            : userPosition
+              ? '◎ Ricentra su di me'
+              : '◎ La mia posizione'}
         </button>
       </div>
 
