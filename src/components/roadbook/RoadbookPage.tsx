@@ -10,10 +10,15 @@ import { ImportMapModal } from './ImportMapModal'
 import { useMapPoints } from '../../hooks/useMapPoints'
 import { useRoadbook } from '../../hooks/useRoadbook'
 
+import { geocodeDestination } from '../../services/geocoding'
+
+import type { MapPointType } from '../../types/map'
+
 import type {
   ActivityCategory,
   RoadbookActivity,
   RoadbookDay,
+  TransportType,
 } from '../../types/roadbook'
 
 import type { Trip } from '../../types/travel'
@@ -88,6 +93,7 @@ function createTripDays(
 
   const days: RoadbookDay[] = []
   const currentDate = new Date(start)
+
   let dayNumber = 1
 
   while (currentDate <= end) {
@@ -132,9 +138,73 @@ function getCategoryDetails(
 function createGoogleMapsUrl(
   location: string,
 ): string {
+  const safeLocation = Array.from(location)
+    .filter((character) => {
+      const codePoint = character.codePointAt(0)
+
+      return (
+        codePoint !== undefined &&
+        (codePoint < 0xd800 ||
+          codePoint > 0xdfff)
+      )
+    })
+    .join('')
+    .trim()
+
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    location,
+    safeLocation,
   )}`
+}
+
+function getMapPointType(
+  category: ActivityCategory,
+): MapPointType {
+  switch (category) {
+    case 'hotel':
+      return 'hotel'
+
+    case 'ristorante':
+      return 'restaurant'
+
+    case 'trasporto':
+      return 'transport'
+
+    case 'visita':
+    case 'altro':
+    default:
+      return 'attraction'
+  }
+}
+
+function getTransportIcon(
+  transportType?: TransportType,
+): string {
+  switch (transportType) {
+    case 'plane':
+      return '✈️'
+
+    case 'train':
+      return '🚆'
+
+    case 'bus':
+      return '🚌'
+
+    case 'ferry':
+      return '⛴️'
+
+    case 'taxi':
+      return '🚕'
+
+    case 'bike':
+      return '🚲'
+
+    case 'walk':
+      return '🚶'
+
+    case 'car':
+    default:
+      return '🚗'
+  }
 }
 
 export default function RoadbookPage({
@@ -148,10 +218,14 @@ export default function RoadbookPage({
     editActivity,
     duplicateActivity,
     toggleCompleted,
+    moveActivity,
     removeActivity,
   } = useRoadbook(activeTrip?.id ?? null)
 
-  const { getTripMapPoints } = useMapPoints()
+  const {
+    addMapPoint,
+    getTripMapPoints,
+  } = useMapPoints()
 
   const days = useMemo(() => {
     if (!activeTrip) {
@@ -171,9 +245,14 @@ export default function RoadbookPage({
   const importedMapPointIds = useMemo(
     () =>
       activities
-        .map((activity) => activity.mapPointId)
+        .map(
+          (activity) =>
+            activity.mapPointId,
+        )
         .filter(
-          (mapPointId): mapPointId is string =>
+          (
+            mapPointId,
+          ): mapPointId is string =>
             Boolean(mapPointId),
         ),
     [activities],
@@ -182,14 +261,20 @@ export default function RoadbookPage({
   const availableMapPointCount =
     tripMapPoints.filter(
       (point) =>
-        !importedMapPointIds.includes(point.id),
+        !importedMapPointIds.includes(
+          point.id,
+        ),
     ).length
 
-  const [selectedDayId, setSelectedDayId] =
-    useState<string | null>(null)
+  const [
+    selectedDayId,
+    setSelectedDayId,
+  ] = useState<string | null>(null)
 
-  const [isFormOpen, setIsFormOpen] =
-    useState(false)
+  const [
+    isFormOpen,
+    setIsFormOpen,
+  ] = useState(false)
 
   const [
     editingActivityId,
@@ -201,16 +286,30 @@ export default function RoadbookPage({
     setIsImportModalOpen,
   ] = useState(false)
 
+  const [
+    locatingActivityId,
+    setLocatingActivityId,
+  ] = useState<string | null>(null)
+
   const [time, setTime] = useState('09:00')
   const [title, setTitle] = useState('')
-  const [location, setLocation] = useState('')
+  const [location, setLocation] =
+    useState('')
   const [notes, setNotes] = useState('')
 
   const [category, setCategory] =
     useState<ActivityCategory>('visita')
 
+  const [
+    transportType,
+    setTransportType,
+  ] = useState<TransportType>('car')
+
   const currentDayId =
-    days.some((day) => day.id === selectedDayId)
+    days.some(
+      (day) =>
+        day.id === selectedDayId,
+    )
       ? selectedDayId
       : days[0]?.id ?? null
 
@@ -224,23 +323,41 @@ export default function RoadbookPage({
       activities
         .filter(
           (activity) =>
-            activity.dayId === currentDayId,
+            activity.dayId ===
+            currentDayId,
         )
-        .sort((firstActivity, secondActivity) =>
-          firstActivity.time.localeCompare(
-            secondActivity.time,
-          ),
+        .sort(
+          (
+            firstActivity,
+            secondActivity,
+          ) => {
+            if (
+              firstActivity.order !==
+              secondActivity.order
+            ) {
+              return (
+                firstActivity.order -
+                secondActivity.order
+              )
+            }
+
+            return firstActivity.createdAt.localeCompare(
+              secondActivity.createdAt,
+            )
+          },
         ),
     [activities, currentDayId],
   )
 
-  const completedActivityCount = useMemo(
-    () =>
-      activities.filter(
-        (activity) => activity.completed,
-      ).length,
-    [activities],
-  )
+  const completedActivityCount =
+    useMemo(
+      () =>
+        activities.filter(
+          (activity) =>
+            activity.completed,
+        ).length,
+      [activities],
+    )
 
   const overallProgress =
     activities.length > 0
@@ -262,13 +379,15 @@ export default function RoadbookPage({
     [activities, days],
   )
 
-  const selectedDayCompletedCount = useMemo(
-    () =>
-      selectedDayActivities.filter(
-        (activity) => activity.completed,
-      ).length,
-    [selectedDayActivities],
-  )
+  const selectedDayCompletedCount =
+    useMemo(
+      () =>
+        selectedDayActivities.filter(
+          (activity) =>
+            activity.completed,
+        ).length,
+      [selectedDayActivities],
+    )
 
   const selectedDayProgress =
     selectedDayActivities.length > 0
@@ -288,6 +407,7 @@ export default function RoadbookPage({
     setLocation('')
     setNotes('')
     setCategory('visita')
+    setTransportType('car')
   }
 
   function openActivityForm() {
@@ -303,9 +423,16 @@ export default function RoadbookPage({
     setEditingActivityId(activity.id)
     setTime(activity.time)
     setTitle(activity.title)
-    setLocation(activity.location ?? '')
+    setLocation(
+      activity.location ?? '',
+    )
     setNotes(activity.notes ?? '')
     setCategory(activity.category)
+
+    setTransportType(
+      activity.transportType ?? 'car',
+    )
+
     setIsFormOpen(true)
   }
 
@@ -320,7 +447,10 @@ export default function RoadbookPage({
   ) {
     event.preventDefault()
 
-    if (!currentDayId || !title.trim()) {
+    if (
+      !currentDayId ||
+      !title.trim()
+    ) {
       return
     }
 
@@ -331,6 +461,10 @@ export default function RoadbookPage({
       location: location.trim(),
       notes: notes.trim(),
       category,
+      transportType:
+        category === 'trasporto'
+          ? transportType
+          : undefined,
     }
 
     if (editingActivityId) {
@@ -345,7 +479,132 @@ export default function RoadbookPage({
     closeActivityForm()
   }
 
-  if (!activeTrip) {
+  async function handleAddActivityToMap(
+    activity: RoadbookActivity,
+  ) {
+    if (
+      !activeTrip ||
+      locatingActivityId
+    ) {
+      return
+    }
+
+    const searchText =
+      activity.location.trim() ||
+      activity.title.trim()
+
+    if (!searchText) {
+      window.alert(
+        'Inserisci prima un luogo o un indirizzo nell’attività.',
+      )
+
+      return
+    }
+
+    const existingPoint =
+      tripMapPoints.find(
+        (point) =>
+          point.name
+            .trim()
+            .toLowerCase() ===
+            activity.title
+              .trim()
+              .toLowerCase() ||
+          point.location
+            .trim()
+            .toLowerCase() ===
+            searchText.toLowerCase(),
+      )
+
+    if (existingPoint) {
+      const confirmed =
+        window.confirm(
+          `Esiste già un punto chiamato "${existingPoint.name}". Collegarlo a questa attività?`,
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      editActivity(activity.id, {
+        dayId: activity.dayId,
+        time: activity.time,
+        title: activity.title,
+        location: activity.location,
+        notes: activity.notes,
+        category: activity.category,
+        transportType:
+          activity.transportType,
+        order: activity.order,
+        mapPointId: existingPoint.id,
+      })
+
+      return
+    }
+
+    setLocatingActivityId(
+      activity.id,
+    )
+
+    try {
+      const query =
+        `${searchText}, ${activeTrip.destination}`
+
+      const coordinates =
+        await geocodeDestination(query)
+
+      if (!coordinates) {
+        window.alert(
+          `Non ho trovato "${searchText}" sulla mappa. Prova ad aggiungere città o indirizzo modificando l’attività.`,
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `Ho trovato "${searchText}". Vuoi aggiungerlo alla mappa del viaggio?`,
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      const mapPoint = addMapPoint({
+        tripId: activeTrip.id,
+        name: activity.title,
+        location: searchText,
+        latitude:
+          coordinates.latitude,
+        longitude:
+          coordinates.longitude,
+        type: getMapPointType(
+          activity.category,
+        ),
+      })
+
+      editActivity(activity.id, {
+        dayId: activity.dayId,
+        time: activity.time,
+        title: activity.title,
+        location: activity.location,
+        notes: activity.notes,
+        category: activity.category,
+        transportType:
+          activity.transportType,
+        order: activity.order,
+        mapPointId: mapPoint.id,
+      })
+    } catch {
+      window.alert(
+        'Non è stato possibile cercare il luogo. Controlla la connessione e riprova.',
+      )
+    } finally {
+      setLocatingActivityId(null)
+    }
+  }
+
+    if (!activeTrip) {
     return (
       <section>
         <button
@@ -357,7 +616,9 @@ export default function RoadbookPage({
         </button>
 
         <div className="mt-12 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <span className="text-5xl">📖</span>
+          <span className="text-5xl">
+            📖
+          </span>
 
           <h1 className="mt-5 text-2xl font-bold">
             Nessun viaggio attivo
@@ -636,7 +897,9 @@ export default function RoadbookPage({
           onClick={openActivityForm}
           className="mt-6 w-full rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center active:scale-[0.99]"
         >
-          <span className="text-4xl">🗓️</span>
+          <span className="text-4xl">
+            🗓️
+          </span>
 
           <h3 className="mt-4 text-lg font-bold">
             Giornata ancora libera
@@ -663,6 +926,14 @@ export default function RoadbookPage({
                     activity.category,
                   )
 
+                const activityIcon =
+                  activity.category ===
+                  'trasporto'
+                    ? getTransportIcon(
+                        activity.transportType,
+                      )
+                    : categoryDetails.icon
+
                 const mapPointId =
                   activity.mapPointId
 
@@ -672,6 +943,16 @@ export default function RoadbookPage({
                         activity.location,
                       )
                     : null
+
+                const isFirstActivity =
+                  selectedDayActivities[0]
+                    ?.id === activity.id
+
+                const isLastActivity =
+                  selectedDayActivities[
+                    selectedDayActivities.length -
+                      1
+                  ]?.id === activity.id
 
                 return (
                   <article
@@ -704,15 +985,17 @@ export default function RoadbookPage({
                     >
                       {activity.completed
                         ? '✓'
-                        : categoryDetails.icon}
+                        : activityIcon}
                     </button>
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-blue-600">
-                            {activity.time}
-                          </p>
+                          {activity.time && (
+                            <p className="text-xs font-semibold text-blue-600">
+                              {activity.time}
+                            </p>
+                          )}
 
                           <h3
                             className={`mt-1 break-words font-bold ${
@@ -725,7 +1008,41 @@ export default function RoadbookPage({
                           </h3>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              moveActivity(
+                                activity.id,
+                                'up',
+                              )
+                            }
+                            disabled={
+                              isFirstActivity
+                            }
+                            className="rounded-full px-2 py-1 text-sm text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-25"
+                            aria-label="Sposta attività in alto"
+                          >
+                            ↑
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              moveActivity(
+                                activity.id,
+                                'down',
+                              )
+                            }
+                            disabled={
+                              isLastActivity
+                            }
+                            className="rounded-full px-2 py-1 text-sm text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-25"
+                            aria-label="Sposta attività in basso"
+                          >
+                            ↓
+                          </button>
+
                           <button
                             type="button"
                             onClick={() =>
@@ -755,16 +1072,16 @@ export default function RoadbookPage({
                           <button
                             type="button"
                             onClick={() => {
-  if (
-    window.confirm(
-      `Eliminare l'attività "${activity.title}"?`,
-    )
-  ) {
-    removeActivity(
-      activity.id,
-    )
-  }
-}}
+                              if (
+                                window.confirm(
+                                  `Eliminare l'attività "${activity.title}"?`,
+                                )
+                              ) {
+                                removeActivity(
+                                  activity.id,
+                                )
+                              }
+                            }}
                             className="rounded-full px-2 py-1 text-sm text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                             aria-label="Elimina attività"
                           >
@@ -787,7 +1104,7 @@ export default function RoadbookPage({
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                          {categoryDetails.icon}{' '}
+                          {activityIcon}{' '}
                           {categoryDetails.label}
                         </span>
 
@@ -804,34 +1121,51 @@ export default function RoadbookPage({
                         )}
                       </div>
 
-                      {(mapPointId || mapsUrl) && (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {mapPointId && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onOpenMapPoint(
-                                  mapPointId,
-                                )
-                              }
-                              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition active:scale-95"
-                            >
-                              🗺️ Mappa TravelMate
-                            </button>
-                          )}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {mapPointId ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onOpenMapPoint(
+                                mapPointId,
+                              )
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition active:scale-95"
+                          >
+                            🗺️ Mappa TravelMate
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleAddActivityToMap(
+                                activity,
+                              )
+                            }
+                            disabled={
+                              locatingActivityId !==
+                              null
+                            }
+                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition active:scale-95 disabled:cursor-wait disabled:bg-slate-300"
+                          >
+                            {locatingActivityId ===
+                            activity.id
+                              ? 'Ricerca in corso...'
+                              : '📍 Aggiungi alla mappa'}
+                          </button>
+                        )}
 
-                          {mapsUrl && (
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition active:scale-95"
-                            >
-                              🧭 Apri in Google Maps
-                            </a>
-                          )}
-                        </div>
-                      )}
+                        {mapsUrl && (
+                          <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition active:scale-95"
+                          >
+                            🧭 Apri in Google Maps
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </article>
                 )
@@ -850,11 +1184,15 @@ export default function RoadbookPage({
         location={location}
         notes={notes}
         category={category}
+        transportType={transportType}
         onTimeChange={setTime}
         onTitleChange={setTitle}
         onLocationChange={setLocation}
         onNotesChange={setNotes}
         onCategoryChange={setCategory}
+        onTransportTypeChange={
+          setTransportType
+        }
         onClose={closeActivityForm}
         onSubmit={handleSubmitActivity}
       />
@@ -875,10 +1213,12 @@ export default function RoadbookPage({
             dayId: input.dayId,
             time: input.time,
             title: input.title.trim(),
-            location: input.location.trim(),
+            location:
+              input.location.trim(),
             notes: input.notes.trim(),
             category: input.category,
-            mapPointId: input.mapPointId,
+            mapPointId:
+              input.mapPointId,
           })
 
           setSelectedDayId(input.dayId)

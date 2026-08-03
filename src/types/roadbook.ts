@@ -5,6 +5,16 @@ export type ActivityCategory =
   | 'trasporto'
   | 'altro'
 
+export type TransportType =
+  | 'plane'
+  | 'car'
+  | 'train'
+  | 'bus'
+  | 'ferry'
+  | 'taxi'
+  | 'bike'
+  | 'walk'
+
 export type RoadbookActivity = {
   id: string
   tripId: string
@@ -14,6 +24,8 @@ export type RoadbookActivity = {
   location: string
   notes: string
   category: ActivityCategory
+  transportType?: TransportType
+  order: number
   completed: boolean
   mapPointId?: string
   createdAt: string
@@ -38,5 +50,7 @@ export type CreateRoadbookActivityInput = {
   location: string
   notes: string
   category: ActivityCategory
+  transportType?: TransportType
+  order?: number
   mapPointId?: string
 }

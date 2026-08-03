@@ -3,6 +3,7 @@ import { type FormEvent } from 'react'
 import type {
   ActivityCategory,
   RoadbookDay,
+  TransportType,
 } from '../../types/roadbook'
 
 type ActivityFormModalProps = {
@@ -15,16 +16,23 @@ type ActivityFormModalProps = {
   location: string
   notes: string
   category: ActivityCategory
+  transportType: TransportType
 
   onTimeChange: (value: string) => void
   onTitleChange: (value: string) => void
   onLocationChange: (value: string) => void
   onNotesChange: (value: string) => void
+
   onCategoryChange: (
     value: ActivityCategory,
   ) => void
 
+  onTransportTypeChange: (
+    value: TransportType,
+  ) => void
+
   onClose: () => void
+
   onSubmit: (
     event: FormEvent<HTMLFormElement>,
   ) => void
@@ -62,6 +70,53 @@ const categoryOptions: {
   },
 ]
 
+const transportOptions: {
+  value: TransportType
+  label: string
+  icon: string
+}[] = [
+  {
+    value: 'plane',
+    label: 'Aereo',
+    icon: '✈️',
+  },
+  {
+    value: 'car',
+    label: 'Auto',
+    icon: '🚗',
+  },
+  {
+    value: 'train',
+    label: 'Treno',
+    icon: '🚆',
+  },
+  {
+    value: 'bus',
+    label: 'Autobus',
+    icon: '🚌',
+  },
+  {
+    value: 'ferry',
+    label: 'Traghetto',
+    icon: '⛴️',
+  },
+  {
+    value: 'taxi',
+    label: 'Taxi',
+    icon: '🚕',
+  },
+  {
+    value: 'bike',
+    label: 'Bicicletta',
+    icon: '🚲',
+  },
+  {
+    value: 'walk',
+    label: 'A piedi',
+    icon: '🚶',
+  },
+]
+
 export default function ActivityFormModal({
   isOpen,
   isEditing,
@@ -71,11 +126,13 @@ export default function ActivityFormModal({
   location,
   notes,
   category,
+  transportType,
   onTimeChange,
   onTitleChange,
   onLocationChange,
   onNotesChange,
   onCategoryChange,
+  onTransportTypeChange,
   onClose,
   onSubmit,
 }: ActivityFormModalProps) {
@@ -140,7 +197,6 @@ export default function ActivityFormModal({
                 onChange={(event) =>
                   onTimeChange(event.target.value)
                 }
-                required
                 className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </label>
@@ -175,6 +231,37 @@ export default function ActivityFormModal({
             </label>
           </div>
 
+          {category === 'trasporto' && (
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold">
+                Mezzo di trasporto
+              </span>
+
+              <select
+                value={transportType}
+                onChange={(event) =>
+                  onTransportTypeChange(
+                    event.target
+                      .value as TransportType,
+                  )
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              >
+                {transportOptions.map(
+                  (option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.icon}{' '}
+                      {option.label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          )}
+
           <label className="block">
             <span className="mb-2 block text-sm font-semibold">
               Titolo
@@ -186,7 +273,7 @@ export default function ActivityFormModal({
               onChange={(event) =>
                 onTitleChange(event.target.value)
               }
-              placeholder="Es. Visita al Colosseo"
+              placeholder="Es. Volo Milano → Madrid"
               required
               autoFocus
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
@@ -206,7 +293,7 @@ export default function ActivityFormModal({
                   event.target.value,
                 )
               }
-              placeholder="Es. Piazza del Colosseo, Roma"
+              placeholder="Es. Aeroporto di Milano Malpensa"
               className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
           </label>
@@ -221,7 +308,7 @@ export default function ActivityFormModal({
               onChange={(event) =>
                 onNotesChange(event.target.value)
               }
-              placeholder="Biglietti, informazioni, promemoria..."
+              placeholder="Numero del volo, biglietti, terminal, prenotazioni..."
               rows={3}
               className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             />
