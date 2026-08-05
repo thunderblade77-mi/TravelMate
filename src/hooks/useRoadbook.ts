@@ -4,20 +4,68 @@ import {
   useState,
 } from 'react'
 
-import {
-  addActivity,
-  deleteActivity,
-  getTripActivities,
-  updateActivities,
-  updateActivity,
-} from '../services/roadbookStorage'
+import { supabase } from '../lib/supabase'
 
 import type {
+  ActivityCategory,
   CreateRoadbookActivityInput,
   RoadbookActivity,
+  TransportType,
 } from '../types/roadbook'
 
 type MoveDirection = 'up' | 'down'
+
+type CloudRoadbookRow = {
+  id: string
+  trip_id: string
+  created_by: string
+  day_id: string
+  activity_time: string
+  title: string
+  location: string
+  notes: string
+  category: ActivityCategory
+  transport_type: TransportType | null
+  activity_order: number
+  completed: boolean
+  map_point_id: string | null
+  created_at: string
+}
+
+function createActivityId(): string {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`
+}
+
+function mapCloudActivity(
+  row: CloudRoadbookRow,
+): RoadbookActivity {
+  return {
+    id: row.id,
+    tripId: row.trip_id,
+    dayId: row.day_id,
+    time: row.activity_time,
+    title: row.title,
+    location: row.location,
+    notes: row.notes,
+    category: row.category,
+    transportType:
+      row.transport_type ?? undefined,
+    order: row.activity_order,
+    completed: row.completed,
+    mapPointId:
+      row.map_point_id ?? undefined,
+    createdAt: row.created_at,
+  }
+}
 
 function sortActivities(
   activities: RoadbookActivity[],
@@ -53,26 +101,144 @@ function sortActivities(
 export function useRoadbook(
   tripId: string | null,
 ) {
-  const [activities, setActivities] = useState<
-    RoadbookActivity[]
-  >([])
+  const [activities, setActivities] =
+    useState<RoadbookActivity[]>([])
 
-  const reload = useCallback(() => {
+  const [userId, setUserId] =
+    useState<string | null>(null)
+
+  const [loading, setLoading] =
+    useState(Boolean(tripId))
+
+  const [error, setError] =
+    useState<string | null>(null)
+
+  const reload = useCallback(async () => {
     if (!tripId) {
       setActivities([])
+      setLoading(false)
+      setError(null)
       return
     }
 
-    setActivities(
-      sortActivities(
-        getTripActivities(tripId),
-      ),
-    )
+    setLoading(true)
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        throw userError
+      }
+
+      if (!user) {
+        setUserId(null)
+        setActivities([])
+        setError(
+          'Devi effettuare il login.',
+        )
+        return
+      }
+
+      setUserId(user.id)
+
+      const {
+        data,
+        error: activitiesError,
+      } = await supabase
+        .from('roadbook_activities')
+        .select(
+          `
+            id,
+            trip_id,
+            created_by,
+            day_id,
+            activity_time,
+            title,
+            location,
+            notes,
+            category,
+            transport_type,
+            activity_order,
+            completed,
+            map_point_id,
+            created_at
+          `,
+        )
+        .eq('trip_id', tripId)
+        .order('day_id', {
+          ascending: true,
+        })
+        .order('activity_order', {
+          ascending: true,
+        })
+        .order('created_at', {
+          ascending: true,
+        })
+
+      if (activitiesError) {
+        throw activitiesError
+      }
+
+      setActivities(
+        sortActivities(
+          (data ?? []).map((row) =>
+            mapCloudActivity(
+              row as CloudRoadbookRow,
+            ),
+          ),
+        ),
+      )
+
+      setError(null)
+    } catch (loadError) {
+      console.error(
+        'Errore caricamento Roadbook:',
+        loadError,
+      )
+
+      setActivities([])
+      setError(
+        'Impossibile caricare il Roadbook.',
+      )
+    } finally {
+      setLoading(false)
+    }
   }, [tripId])
 
   useEffect(() => {
-    reload()
+    void reload()
   }, [reload])
+
+  useEffect(() => {
+    if (!tripId) {
+      return
+    }
+
+    const channel = supabase
+      .channel(
+        `travelg-roadbook-${tripId}`,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'roadbook_activities',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          void reload()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [tripId, reload])
 
   function createActivity(
     input: Omit<
@@ -80,16 +246,94 @@ export function useRoadbook(
       'tripId'
     >,
   ) {
-    if (!tripId) {
+    if (!tripId || !userId) {
       return
     }
 
-    addActivity({
-      tripId,
-      ...input,
-    })
+    const dayActivities = activities.filter(
+      (activity) =>
+        activity.dayId === input.dayId,
+    )
 
-    reload()
+    const nextOrder =
+      typeof input.order === 'number'
+        ? input.order
+        : dayActivities.length
+
+    const newActivity: RoadbookActivity = {
+      id: createActivityId(),
+      tripId,
+      dayId: input.dayId,
+      time: input.time,
+      title: input.title.trim(),
+      location: input.location.trim(),
+      notes: input.notes.trim(),
+      category: input.category,
+      transportType:
+        input.transportType,
+      order: nextOrder,
+      completed: false,
+      mapPointId: input.mapPointId,
+      createdAt:
+        new Date().toISOString(),
+    }
+
+    setActivities((currentActivities) =>
+      sortActivities([
+        ...currentActivities,
+        newActivity,
+      ]),
+    )
+
+    void supabase
+      .from('roadbook_activities')
+      .insert({
+        id: newActivity.id,
+        trip_id: newActivity.tripId,
+        created_by: userId,
+        day_id: newActivity.dayId,
+        activity_time:
+          newActivity.time,
+        title: newActivity.title,
+        location: newActivity.location,
+        notes: newActivity.notes,
+        category: newActivity.category,
+        transport_type:
+          newActivity.transportType ??
+          null,
+        activity_order:
+          newActivity.order,
+        completed:
+          newActivity.completed,
+        map_point_id:
+          newActivity.mapPointId ?? null,
+        created_at:
+          newActivity.createdAt,
+      })
+      .then(({ error: insertError }) => {
+        if (!insertError) {
+          setError(null)
+          return
+        }
+
+        console.error(
+          'Errore creazione attività:',
+          insertError,
+        )
+
+        setActivities(
+          (currentActivities) =>
+            currentActivities.filter(
+              (activity) =>
+                activity.id !==
+                newActivity.id,
+            ),
+        )
+
+        setError(
+          'Impossibile creare l’attività.',
+        )
+      })
   }
 
   function editActivity(
@@ -99,24 +343,97 @@ export function useRoadbook(
       'tripId'
     >,
   ) {
-    const activity = activities.find(
-      (item) => item.id === activityId,
-    )
+    const currentActivity =
+      activities.find(
+        (activity) =>
+          activity.id === activityId,
+      )
 
-    if (!activity) {
+    if (!currentActivity) {
       return
     }
 
-    updateActivity({
-      ...activity,
-      ...input,
+    const updatedActivity: RoadbookActivity = {
+      ...currentActivity,
+      dayId: input.dayId,
+      time: input.time,
+      title: input.title.trim(),
+      location: input.location.trim(),
+      notes: input.notes.trim(),
+      category: input.category,
+      transportType:
+        input.transportType,
       order:
         typeof input.order === 'number'
           ? input.order
-          : activity.order,
-    })
+          : currentActivity.order,
+      mapPointId: input.mapPointId,
+    }
 
-    reload()
+    setActivities((currentActivities) =>
+      sortActivities(
+        currentActivities.map(
+          (activity) =>
+            activity.id === activityId
+              ? updatedActivity
+              : activity,
+        ),
+      ),
+    )
+
+    void supabase
+      .from('roadbook_activities')
+      .update({
+        day_id:
+          updatedActivity.dayId,
+        activity_time:
+          updatedActivity.time,
+        title:
+          updatedActivity.title,
+        location:
+          updatedActivity.location,
+        notes:
+          updatedActivity.notes,
+        category:
+          updatedActivity.category,
+        transport_type:
+          updatedActivity.transportType ??
+          null,
+        activity_order:
+          updatedActivity.order,
+        map_point_id:
+          updatedActivity.mapPointId ??
+          null,
+      })
+      .eq('id', activityId)
+      .then(({ error: updateError }) => {
+        if (!updateError) {
+          setError(null)
+          return
+        }
+
+        console.error(
+          'Errore modifica attività:',
+          updateError,
+        )
+
+        setActivities(
+          (currentActivities) =>
+            sortActivities(
+              currentActivities.map(
+                (activity) =>
+                  activity.id ===
+                  activityId
+                    ? currentActivity
+                    : activity,
+              ),
+            ),
+        )
+
+        setError(
+          'Impossibile modificare l’attività.',
+        )
+      })
   }
 
   function duplicateActivity(
@@ -126,12 +443,11 @@ export function useRoadbook(
       (item) => item.id === activityId,
     )
 
-    if (!activity || !tripId) {
+    if (!activity) {
       return
     }
 
-    addActivity({
-      tripId,
+    createActivity({
       dayId: activity.dayId,
       time: activity.time,
       title: `${activity.title} (copia)`,
@@ -142,27 +458,70 @@ export function useRoadbook(
         activity.transportType,
       mapPointId: activity.mapPointId,
     })
-
-    reload()
   }
 
   function toggleCompleted(
     activityId: string,
   ) {
-    const activity = activities.find(
-      (item) => item.id === activityId,
-    )
+    const currentActivity =
+      activities.find(
+        (activity) =>
+          activity.id === activityId,
+      )
 
-    if (!activity) {
+    if (!currentActivity) {
       return
     }
 
-    updateActivity({
-      ...activity,
-      completed: !activity.completed,
-    })
+    const nextCompleted =
+      !currentActivity.completed
 
-    reload()
+    setActivities(
+      (currentActivities) =>
+        currentActivities.map(
+          (activity) =>
+            activity.id === activityId
+              ? {
+                  ...activity,
+                  completed:
+                    nextCompleted,
+                }
+              : activity,
+        ),
+    )
+
+    void supabase
+      .from('roadbook_activities')
+      .update({
+        completed: nextCompleted,
+      })
+      .eq('id', activityId)
+      .then(({ error: updateError }) => {
+        if (!updateError) {
+          setError(null)
+          return
+        }
+
+        console.error(
+          'Errore completamento attività:',
+          updateError,
+        )
+
+        setActivities(
+          (currentActivities) =>
+            currentActivities.map(
+              (activity) =>
+                activity.id ===
+                activityId
+                  ? currentActivity
+                  : activity,
+            ),
+        )
+
+        setError(
+          'Impossibile aggiornare l’attività.',
+        )
+      })
   }
 
   function moveActivity(
@@ -183,7 +542,10 @@ export function useRoadbook(
           item.dayId === activity.dayId,
       )
       .sort(
-        (firstActivity, secondActivity) =>
+        (
+          firstActivity,
+          secondActivity,
+        ) =>
           firstActivity.order -
           secondActivity.order,
       )
@@ -221,7 +583,7 @@ export function useRoadbook(
       movedActivity,
     )
 
-    const updatedActivities =
+    const updatedDayActivities =
       reorderedActivities.map(
         (item, index) => ({
           ...item,
@@ -229,19 +591,117 @@ export function useRoadbook(
         }),
       )
 
-    updateActivities(updatedActivities)
-    reload()
+    const previousActivities =
+      activities
+
+    setActivities((currentActivities) => {
+      const updatedMap = new Map(
+        updatedDayActivities.map(
+          (item) => [
+            item.id,
+            item,
+          ],
+        ),
+      )
+
+      return sortActivities(
+        currentActivities.map(
+          (item) =>
+            updatedMap.get(item.id) ??
+            item,
+        ),
+      )
+    })
+
+    void Promise.all(
+      updatedDayActivities.map(
+        (item) =>
+          supabase
+            .from(
+              'roadbook_activities',
+            )
+            .update({
+              activity_order:
+                item.order,
+            })
+            .eq('id', item.id),
+      ),
+    ).then((results) => {
+      const failedResult =
+        results.find(
+          (result) => result.error,
+        )
+
+      if (!failedResult?.error) {
+        setError(null)
+        return
+      }
+
+      console.error(
+        'Errore riordinamento attività:',
+        failedResult.error,
+      )
+
+      setActivities(previousActivities)
+
+      setError(
+        'Impossibile riordinare le attività.',
+      )
+    })
   }
 
   function removeActivity(
     activityId: string,
   ) {
-    deleteActivity(activityId)
-    reload()
+    const removedActivity =
+      activities.find(
+        (activity) =>
+          activity.id === activityId,
+      )
+
+    setActivities(
+      (currentActivities) =>
+        currentActivities.filter(
+          (activity) =>
+            activity.id !== activityId,
+        ),
+    )
+
+    void supabase
+      .from('roadbook_activities')
+      .delete()
+      .eq('id', activityId)
+      .then(({ error: deleteError }) => {
+        if (!deleteError) {
+          setError(null)
+          return
+        }
+
+        console.error(
+          'Errore eliminazione attività:',
+          deleteError,
+        )
+
+        if (removedActivity) {
+          setActivities(
+            (currentActivities) =>
+              sortActivities([
+                ...currentActivities,
+                removedActivity,
+              ]),
+          )
+        }
+
+        setError(
+          'Impossibile eliminare l’attività.',
+        )
+      })
   }
 
   return {
     activities,
+    loading,
+    error,
     createActivity,
     editActivity,
     duplicateActivity,

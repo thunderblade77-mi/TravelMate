@@ -273,6 +273,7 @@ export function useExpenses(
           amount: newExpense.amount,
           category: newExpense.category,
           expense_date: newExpense.date,
+          payment_method: newExpense.paymentMethod,
           paid_by: newExpense.paidBy,
           notes: newExpense.notes,
           created_at: newExpense.createdAt,
