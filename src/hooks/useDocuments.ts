@@ -515,7 +515,7 @@ export function useDocuments(
         title: newDocument.title,
         category: newDocument.category,
         document_date:
-          newDocument.date,
+  newDocument.date || null,
         notes: newDocument.notes,
         provider:
           newDocument.provider ?? null,
@@ -716,7 +716,7 @@ export function useDocuments(
         category:
           updatedDocument.category,
         document_date:
-          updatedDocument.date,
+  updatedDocument.date || null,
         notes: updatedDocument.notes,
         provider:
           updatedDocument.provider ??
