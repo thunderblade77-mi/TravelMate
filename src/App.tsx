@@ -164,6 +164,7 @@ export default function App() {
     createTrip,
     selectTrip,
     removeTrip,
+    reload: reloadTrips,
   } = useTrips()
 
   const [destination, setDestination] = useState('')
@@ -369,13 +370,14 @@ async function handleJoinTrip() {
   }
 
   if (data) {
-    selectTrip(data)
-    navigate('/')
+  await reloadTrips()
+  selectTrip(data)
+  navigate('/trips')
 
-    window.alert(
-      '🎉 Viaggio aggiunto con successo!',
-    )
-  }
+  window.alert(
+    '🎉 Viaggio aggiunto con successo!',
+  )
+}
 }
 
 if (authLoading) {
