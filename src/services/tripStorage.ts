@@ -1,7 +1,7 @@
 import type { Trip } from '../types/travel'
 
-const TRIPS_STORAGE_KEY = 'travelmate-trips'
-const ACTIVE_TRIP_STORAGE_KEY = 'travelmate-active-trip-id'
+const TRIPS_STORAGE_KEY = 'TravelG-trips'
+const ACTIVE_TRIP_STORAGE_KEY = 'TravelG-active-trip-id'
 
 export function loadTrips(): Trip[] {
   try {

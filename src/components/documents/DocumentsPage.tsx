@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,6 +10,11 @@ import {
 import { useAttachments } from '../../hooks/useAttachments'
 import { useDocuments } from '../../hooks/useDocuments'
 
+import {
+  importBookingPdf,
+  type BookingImportResult,
+} from '../../services/bookingImport'
+
 import type { TravelAttachment } from '../../types/attachment'
 import type {
   TravelDocument,
@@ -18,12 +24,6 @@ import type { Trip } from '../../types/travel'
 
 type DocumentsPageProps = {
   activeTrip: Trip | null
-}
-
-type ExpirationStatus = {
-  label: string
-  description: string
-  className: string
 }
 
 type CategoryInfo = {
@@ -38,21 +38,37 @@ type DocumentCardProps = {
   onDeleteDocument: (documentId: string) => void
 }
 
+type PendingAttachment = {
+  documentId: string
+  file: File
+}
+
+type PendingAttachmentWriterProps = {
+  pendingAttachment: PendingAttachment | null
+  onCompleted: () => void
+  onError: (message: string) => void
+}
+
 const categories: CategoryInfo[] = [
-  {
-    value: 'flight',
-    label: 'Volo',
-    icon: '✈️',
-  },
   {
     value: 'accommodation',
     label: 'Hotel',
     icon: '🏨',
   },
   {
+    value: 'flight',
+    label: 'Volo',
+    icon: '✈️',
+  },
+  {
     value: 'transport',
     label: 'Trasporto',
     icon: '🚗',
+  },
+  {
+    value: 'ticket',
+    label: 'Biglietto',
+    icon: '🎫',
   },
   {
     value: 'insurance',
@@ -65,39 +81,21 @@ const categories: CategoryInfo[] = [
     icon: '🛂',
   },
   {
-    value: 'ticket',
-    label: 'Biglietto',
-    icon: '🎫',
-  },
-  {
     value: 'other',
     label: 'Altro',
     icon: '📄',
   },
 ]
 
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
-
 function parseLocalDate(date: string): Date {
   return new Date(`${date}T00:00:00`)
 }
 
-function getToday(): Date {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+function formatDate(date?: string): string {
+  if (!date) {
+    return ''
+  }
 
-  return today
-}
-
-function getDaysUntil(date: string): number {
-  return Math.ceil(
-    (parseLocalDate(date).getTime() -
-      getToday().getTime()) /
-      MILLISECONDS_PER_DAY,
-  )
-}
-
-function formatDocumentDate(date: string): string {
   return new Intl.DateTimeFormat('it-IT', {
     day: '2-digit',
     month: 'long',
@@ -131,61 +129,88 @@ function getAttachmentIcon(
   return '📎'
 }
 
-function getExpirationStatus(
-  document: TravelDocument,
-): ExpirationStatus | null {
-  if (!document.expiresAt) {
-    return null
-  }
+function normalizeWebsite(website: string): string {
+  return /^https?:\/\//i.test(website)
+    ? website
+    : `https://${website}`
+}
 
-  const daysUntilExpiration = getDaysUntil(
-    document.expiresAt,
-  )
+function createMapsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    address,
+  )}`
+}
 
-  if (daysUntilExpiration < 0) {
-    const elapsedDays = Math.abs(
-      daysUntilExpiration,
-    )
+function PendingAttachmentWriter({
+  pendingAttachment,
+  onCompleted,
+  onError,
+}: PendingAttachmentWriterProps) {
+  const documentId =
+    pendingAttachment?.documentId
 
-    return {
-      label: 'Scaduto',
-      description:
-        elapsedDays === 1
-          ? 'Scaduto ieri'
-          : `Scaduto da ${elapsedDays} giorni`,
-      className: 'bg-red-100 text-red-700',
+  const { addAttachment } =
+    useAttachments(documentId)
+
+  useEffect(() => {
+    if (!pendingAttachment) {
+      return
     }
-  }
 
-  if (daysUntilExpiration === 0) {
-    return {
-      label: 'Scade oggi',
-      description: 'Scadenza oggi',
-      className: 'bg-red-100 text-red-700',
+    const currentAttachment =
+      pendingAttachment
+
+    let cancelled = false
+
+    async function saveAttachment() {
+      const temporaryUrl =
+        URL.createObjectURL(
+          currentAttachment.file,
+        )
+
+      try {
+        await addAttachment({
+          documentId:
+            currentAttachment.documentId,
+          name:
+            currentAttachment.file.name,
+          mimeType:
+            currentAttachment.file.type ||
+            'application/pdf',
+          size:
+            currentAttachment.file.size,
+          url: temporaryUrl,
+        })
+
+        if (!cancelled) {
+          onCompleted()
+        }
+      } catch {
+        URL.revokeObjectURL(
+          temporaryUrl,
+        )
+
+        if (!cancelled) {
+          onError(
+            'La prenotazione è stata salvata, ma non è stato possibile allegare il PDF.',
+          )
+        }
+      }
     }
-  }
 
-  const reminderDays =
-    document.reminderDays ?? 30
+    void saveAttachment()
 
-  if (daysUntilExpiration <= reminderDays) {
-    return {
-      label: 'In scadenza',
-      description:
-        daysUntilExpiration === 1
-          ? 'Scade domani'
-          : `Scade tra ${daysUntilExpiration} giorni`,
-      className:
-        'bg-amber-100 text-amber-700',
+    return () => {
+      cancelled = true
     }
-  }
+  }, [
+    pendingAttachment,
+    addAttachment,
+    onCompleted,
+    onError,
+  ])
 
-  return {
-    label: 'Valido',
-    description: `Scade tra ${daysUntilExpiration} giorni`,
-    className:
-      'bg-emerald-100 text-emerald-700',
-  }
+  return null
 }
 
 function DocumentCard({
@@ -204,17 +229,14 @@ function DocumentCard({
   const fileInputRef =
     useRef<HTMLInputElement>(null)
 
-  const expirationStatus =
-    getExpirationStatus(document)
-
-  function handleSelectFiles(
+  async function handleSelectFiles(
     event: ChangeEvent<HTMLInputElement>,
   ) {
     const selectedFiles = Array.from(
       event.target.files ?? [],
     )
 
-    selectedFiles.forEach((file) => {
+    for (const file of selectedFiles) {
       const isPdf =
         file.type === 'application/pdf'
 
@@ -222,142 +244,234 @@ function DocumentCard({
         file.type.startsWith('image/')
 
       if (!isPdf && !isImage) {
-        return
+        continue
       }
 
       const temporaryUrl =
         URL.createObjectURL(file)
 
-      addAttachment({
-        documentId: document.id,
-        name: file.name,
-        mimeType:
-          file.type ||
-          'application/octet-stream',
-        size: file.size,
-        url: temporaryUrl,
-      })
-    })
+      try {
+        await addAttachment({
+          documentId: document.id,
+          name: file.name,
+          mimeType:
+            file.type ||
+            'application/octet-stream',
+          size: file.size,
+          url: temporaryUrl,
+        })
+      } catch {
+        URL.revokeObjectURL(temporaryUrl)
+      }
+    }
 
     event.target.value = ''
   }
 
-  function handleDeleteAttachment(
+  async function handleDeleteAttachment(
     attachment: TravelAttachment,
   ) {
-    if (attachment.url.startsWith('blob:')) {
-      URL.revokeObjectURL(attachment.url)
-    }
-
-    deleteAttachment(attachment.id)
+    await deleteAttachment(attachment.id)
   }
 
-  function handleDeleteDocument() {
-    attachments.forEach((attachment) => {
-      if (attachment.url.startsWith('blob:')) {
-        URL.revokeObjectURL(attachment.url)
-      }
-    })
+  async function handleDeleteDocument() {
+    const confirmed = window.confirm(
+      `Eliminare "${document.title}"?`,
+    )
 
-    clearDocumentAttachments(document.id)
+    if (!confirmed) {
+      return
+    }
+
+    await clearDocumentAttachments(document.id)
     onDeleteDocument(document.id)
   }
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-2xl">
-              {categoryInfo.icon}
-            </span>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-2xl">
+            {categoryInfo.icon}
+          </span>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="truncate font-bold">
-                  {document.title}
-                </h3>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              {categoryInfo.label}
+            </p>
 
-                {expirationStatus && (
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${expirationStatus.className}`}
-                  >
-                    {expirationStatus.label}
-                  </span>
-                )}
+            <h3 className="mt-1 break-words text-lg font-bold">
+              {document.title}
+            </h3>
 
-                {attachmentCount > 0 && (
-                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                    📎 {attachmentCount}
-                  </span>
-                )}
-              </div>
-
+            {document.provider && (
               <p className="mt-1 text-sm text-slate-500">
-                {categoryInfo.label}
+                {document.provider}
               </p>
-            </div>
+            )}
           </div>
-
-          {document.date && (
-            <p className="mt-4 text-sm font-medium text-slate-600">
-              📅{' '}
-              {formatDocumentDate(document.date)}
-            </p>
-          )}
-
-          {document.expiresAt && (
-            <div className="mt-3 rounded-xl bg-slate-50 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-slate-700">
-                  ⏰ Scadenza
-                </p>
-
-                <p className="text-sm font-semibold text-slate-900">
-                  {formatDocumentDate(
-                    document.expiresAt,
-                  )}
-                </p>
-              </div>
-
-              {expirationStatus && (
-                <p className="mt-1 text-xs text-slate-500">
-                  {expirationStatus.description}
-                  {' · '}
-                  preavviso{' '}
-                  {document.reminderDays ?? 30}{' '}
-                  giorni
-                </p>
-              )}
-            </div>
-          )}
-
-          {document.notes && (
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-              {document.notes}
-            </p>
-          )}
         </div>
 
         <button
           type="button"
-          aria-label={`Elimina ${document.title}`}
-          onClick={handleDeleteDocument}
+          onClick={() => {
+            void handleDeleteDocument()
+          }}
           className="shrink-0 rounded-xl px-3 py-2 text-red-600 transition hover:bg-red-50 active:scale-95"
+          aria-label={`Elimina ${document.title}`}
         >
           🗑️
         </button>
       </div>
 
+      <div className="mt-5 grid gap-3">
+        {document.referenceCode && (
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {document.category === 'identity'
+                ? 'Numero documento'
+                : 'Codice prenotazione'}
+            </p>
+
+            <p className="mt-1 break-all font-bold">
+              {document.referenceCode}
+            </p>
+          </div>
+        )}
+
+        {(document.origin ||
+          document.destination) && (
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-sm font-semibold">
+              {document.origin || '—'} →{' '}
+              {document.destination || '—'}
+            </p>
+          </div>
+        )}
+
+        {(document.startDate ||
+          document.endDate) && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">
+                {document.category ===
+                'accommodation'
+                  ? 'Check-in'
+                  : 'Partenza'}
+              </p>
+
+              <p className="mt-1 text-sm font-semibold">
+                {formatDate(document.startDate) ||
+                  '—'}
+              </p>
+
+              {document.startTime && (
+                <p className="mt-1 text-sm text-blue-600">
+                  {document.startTime}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">
+                {document.category ===
+                'accommodation'
+                  ? 'Check-out'
+                  : 'Arrivo'}
+              </p>
+
+              <p className="mt-1 text-sm font-semibold">
+                {formatDate(document.endDate) ||
+                  '—'}
+              </p>
+
+              {document.endTime && (
+                <p className="mt-1 text-sm text-blue-600">
+                  {document.endTime}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {document.date && (
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm">
+            📅 {formatDate(document.date)}
+          </div>
+        )}
+
+        {document.expiresAt && (
+          <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
+            ⏰ Scadenza: {formatDate(document.expiresAt)}
+          </div>
+        )}
+
+        {document.address && (
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm">
+            📍 {document.address}
+          </div>
+        )}
+
+        {document.notes && (
+          <p className="whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+            {document.notes}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {document.address && (
+          <a
+            href={createMapsUrl(document.address)}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            🧭 Naviga
+          </a>
+        )}
+
+        {document.phone && (
+          <a
+            href={`tel:${document.phone}`}
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
+          >
+            ☎️ Chiama
+          </a>
+        )}
+
+        {document.email && (
+          <a
+            href={`mailto:${document.email}`}
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
+          >
+            ✉️ Email
+          </a>
+        )}
+
+        {document.website && (
+          <a
+            href={normalizeWebsite(
+              document.website,
+            )}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
+          >
+            🔗 Apri prenotazione
+          </a>
+        )}
+      </div>
+
       <div className="mt-5 border-t border-slate-100 pt-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="font-semibold text-slate-800">
+            <h4 className="font-semibold">
               📎 Allegati
             </h4>
 
             <p className="mt-1 text-xs text-slate-500">
-              PDF e immagini del documento
+              Voucher, PDF, boarding pass e immagini
             </p>
           </div>
 
@@ -366,9 +480,9 @@ function DocumentCard({
             onClick={() =>
               fileInputRef.current?.click()
             }
-            className="shrink-0 rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 active:scale-95"
+            className="rounded-xl bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700"
           >
-            + Aggiungi file
+            + File
           </button>
 
           <input
@@ -376,7 +490,9 @@ function DocumentCard({
             type="file"
             multiple
             accept="application/pdf,image/jpeg,image/png,image/webp"
-            onChange={handleSelectFiles}
+            onChange={(event) => {
+              void handleSelectFiles(event)
+            }}
             className="hidden"
           />
         </div>
@@ -387,35 +503,27 @@ function DocumentCard({
             onClick={() =>
               fileInputRef.current?.click()
             }
-            className="mt-4 w-full rounded-2xl border border-dashed border-slate-300 p-5 text-center transition hover:border-blue-300 hover:bg-blue-50/50"
+            className="mt-4 w-full rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500"
           >
-            <span className="text-2xl">📂</span>
-
-            <span className="mt-2 block text-sm font-semibold text-slate-700">
-              Nessun allegato
-            </span>
-
-            <span className="mt-1 block text-xs text-slate-500">
-              Tocca qui per aggiungere PDF o immagini
-            </span>
+            Aggiungi voucher o documento
           </button>
         ) : (
           <div className="mt-4 space-y-2">
             {attachments.map((attachment) => (
               <div
                 key={attachment.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
+                className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
+                <span className="text-xl">
                   {getAttachmentIcon(attachment)}
                 </span>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-800">
+                  <p className="truncate text-sm font-semibold">
                     {attachment.name}
                   </p>
 
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="text-xs text-slate-500">
                     {formatFileSize(
                       attachment.size,
                     )}
@@ -426,21 +534,19 @@ function DocumentCard({
                   href={attachment.url}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label={`Apri ${attachment.name}`}
-                  className="shrink-0 rounded-lg px-2.5 py-2 text-sm text-blue-600 transition hover:bg-blue-100 active:scale-95"
+                  className="rounded-lg px-2 py-1 text-blue-600"
                 >
                   👁️
                 </a>
 
                 <button
                   type="button"
-                  aria-label={`Elimina ${attachment.name}`}
-                  onClick={() =>
-                    handleDeleteAttachment(
+                  onClick={() => {
+                    void handleDeleteAttachment(
                       attachment,
                     )
-                  }
-                  className="shrink-0 rounded-lg px-2.5 py-2 text-sm text-red-600 transition hover:bg-red-100 active:scale-95"
+                  }}
+                  className="rounded-lg px-2 py-1 text-red-600"
                 >
                   🗑️
                 </button>
@@ -449,10 +555,18 @@ function DocumentCard({
           </div>
         )}
 
+        {attachmentCount > 0 && (
+          <p className="mt-3 text-xs text-slate-400">
+            {attachmentCount}{' '}
+            {attachmentCount === 1
+              ? 'allegato'
+              : 'allegati'}
+          </p>
+        )}
+
         <p className="mt-3 text-xs leading-5 text-slate-400">
-          Gli allegati usano per ora un collegamento
-          temporaneo del browser. Nel prossimo passaggio
-          li renderemo permanenti con IndexedDB.
+          Gli allegati sono salvati in modo permanente
+          sul dispositivo tramite IndexedDB.
         </p>
       </div>
     </article>
@@ -464,21 +578,64 @@ export default function DocumentsPage({
 }: DocumentsPageProps) {
   const {
     documents,
-    expiredDocumentCount,
-    expiringDocumentCount,
     addDocument,
     deleteDocument,
   } = useDocuments(activeTrip?.id)
 
+  const importFileInputRef =
+    useRef<HTMLInputElement>(null)
+
+  const [category, setCategory] =
+    useState<TravelDocumentCategory>(
+      'accommodation',
+    )
+
   const [title, setTitle] = useState('')
+  const [provider, setProvider] = useState('')
+  const [referenceCode, setReferenceCode] =
+    useState('')
   const [date, setDate] = useState('')
-  const [notes, setNotes] = useState('')
+  const [startDate, setStartDate] =
+    useState('')
+  const [startTime, setStartTime] =
+    useState('')
+  const [endDate, setEndDate] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [origin, setOrigin] = useState('')
+  const [destination, setDestination] =
+    useState('')
+  const [address, setAddress] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [website, setWebsite] = useState('')
   const [expiresAt, setExpiresAt] =
     useState('')
   const [reminderDays, setReminderDays] =
     useState('30')
-  const [category, setCategory] =
-    useState<TravelDocumentCategory>('other')
+  const [notes, setNotes] = useState('')
+
+  const [isImporting, setIsImporting] =
+    useState(false)
+
+  const [importError, setImportError] =
+    useState<string | null>(null)
+
+  const [importMessage, setImportMessage] =
+    useState<string | null>(null)
+
+  const [importWarnings, setImportWarnings] =
+    useState<string[]>([])
+
+  const [importConfidence, setImportConfidence] =
+    useState<number | null>(null)
+
+  const [importedPdf, setImportedPdf] =
+    useState<File | null>(null)
+
+  const [
+    pendingAttachment,
+    setPendingAttachment,
+  ] = useState<PendingAttachment | null>(null)
 
   const categoryMap = useMemo(
     () =>
@@ -496,8 +653,8 @@ export default function DocumentsPage({
 
   if (!activeTrip) {
     return (
-      <section className="mx-auto max-w-xl p-6">
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <section>
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <div className="text-5xl">📄</div>
 
           <h2 className="mt-4 text-2xl font-bold">
@@ -505,8 +662,8 @@ export default function DocumentsPage({
           </h2>
 
           <p className="mt-2 text-slate-500">
-            Crea prima un viaggio per poter salvare
-            documenti.
+            Seleziona un viaggio per usare il Travel
+            Wallet.
           </p>
         </div>
       </section>
@@ -514,6 +671,97 @@ export default function DocumentsPage({
   }
 
   const trip = activeTrip
+
+  function resetForm() {
+    setTitle('')
+    setProvider('')
+    setReferenceCode('')
+    setDate('')
+    setStartDate('')
+    setStartTime('')
+    setEndDate('')
+    setEndTime('')
+    setOrigin('')
+    setDestination('')
+    setAddress('')
+    setPhone('')
+    setEmail('')
+    setWebsite('')
+    setExpiresAt('')
+    setReminderDays('30')
+    setNotes('')
+    setImportedPdf(null)
+    setImportWarnings([])
+    setImportConfidence(null)
+  }
+
+  function applyImportedData(
+    imported: BookingImportResult,
+  ) {
+    setCategory(imported.category)
+    setTitle(imported.title)
+    setProvider(imported.provider ?? '')
+    setReferenceCode(
+      imported.referenceCode ?? '',
+    )
+    setDate(imported.date ?? '')
+    setStartDate(imported.startDate ?? '')
+    setStartTime(imported.startTime ?? '')
+    setEndDate(imported.endDate ?? '')
+    setEndTime(imported.endTime ?? '')
+    setOrigin(imported.origin ?? '')
+    setDestination(
+      imported.destination ?? '',
+    )
+    setAddress(imported.address ?? '')
+    setPhone(imported.phone ?? '')
+    setEmail(imported.email ?? '')
+    setWebsite(imported.website ?? '')
+    setExpiresAt(imported.expiresAt ?? '')
+    setNotes(imported.notes)
+    setImportWarnings(imported.warnings)
+    setImportConfidence(imported.confidence)
+  }
+
+  async function handleImportPdf(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0]
+
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setIsImporting(true)
+    setImportError(null)
+    setImportMessage(null)
+    setImportWarnings([])
+    setImportConfidence(null)
+
+    try {
+      const imported =
+        await importBookingPdf(file)
+
+      applyImportedData(imported)
+      setImportedPdf(file)
+
+      setImportMessage(
+        'PDF analizzato. Controlla e correggi i campi prima di salvare.',
+      )
+    } catch (error) {
+      setImportedPdf(null)
+
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : 'Non è stato possibile analizzare il PDF.',
+      )
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
   function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -524,279 +772,496 @@ export default function DocumentsPage({
       return
     }
 
-    const parsedReminderDays =
-      reminderDays === ''
-        ? undefined
-        : Number(reminderDays)
-
-    addDocument({
+    const newDocument = addDocument({
       tripId: trip.id,
       title,
       category,
       date,
       notes,
+      provider,
+      referenceCode,
+      startDate,
+      startTime,
+      endDate,
+      endTime,
+      origin,
+      destination,
+      address,
+      phone,
+      email,
+      website,
       expiresAt: expiresAt || undefined,
       reminderDays:
-        parsedReminderDays !== undefined &&
-        Number.isFinite(parsedReminderDays)
-          ? Math.max(
-              0,
-              Math.floor(parsedReminderDays),
-            )
-          : undefined,
+        reminderDays === ''
+          ? undefined
+          : Number(reminderDays),
     })
 
-    setTitle('')
-    setDate('')
-    setNotes('')
-    setExpiresAt('')
-    setReminderDays('30')
-    setCategory('other')
+    if (importedPdf) {
+      setPendingAttachment({
+        documentId: newDocument.id,
+        file: importedPdf,
+      })
+    } else {
+      setImportMessage(
+        'Elemento salvato nel Travel Wallet.',
+      )
+    }
+
+    resetForm()
   }
 
+  const isAccommodation =
+    category === 'accommodation'
+
+  const isFlight = category === 'flight'
+
+  const isTransport =
+    category === 'transport'
+
+  const isIdentity =
+    category === 'identity'
+
+  const isInsurance =
+    category === 'insurance'
+
   return (
-    <section className="mx-auto max-w-3xl space-y-6">
+    <section className="space-y-6">
+      <PendingAttachmentWriter
+        pendingAttachment={pendingAttachment}
+        onCompleted={() => {
+          setPendingAttachment(null)
+          setImportMessage(
+            'Prenotazione e PDF salvati nel Travel Wallet.',
+          )
+        }}
+        onError={(message) => {
+          setPendingAttachment(null)
+          setImportError(message)
+        }}
+      />
+
       <header>
         <p className="text-sm font-medium text-blue-600">
           {trip.destination}
         </p>
 
         <h1 className="mt-1 text-3xl font-bold">
-          📄 Documenti
+          🎒 Travel Wallet
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Conserva prenotazioni, biglietti e
-          documenti importanti del viaggio.
+          Prenotazioni, biglietti e documenti del
+          viaggio in un unico posto.
         </p>
       </header>
 
-      {(expiredDocumentCount > 0 ||
-        expiringDocumentCount > 0) && (
-        <div className="space-y-3">
-          {expiredDocumentCount > 0 && (
-            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <span className="text-xl">⚠️</span>
+      <div className="rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-50 to-blue-50 p-5">
+        <div className="flex items-start gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm">
+            ✨
+          </span>
 
-              <div>
-                <p className="font-semibold text-red-800">
-                  {expiredDocumentCount === 1
-                    ? '1 documento scaduto'
-                    : `${expiredDocumentCount} documenti scaduti`}
-                </p>
+          <div>
+            <h2 className="font-bold">
+              Importazione assistita AI
+            </h2>
 
-                <p className="mt-1 text-sm text-red-700">
-                  Controlla i documenti prima della
-                  partenza.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {expiringDocumentCount > 0 && (
-            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <span className="text-xl">⏰</span>
-
-              <div>
-                <p className="font-semibold text-amber-800">
-                  {expiringDocumentCount === 1
-                    ? '1 documento in scadenza'
-                    : `${expiringDocumentCount} documenti in scadenza`}
-                </p>
-
-                <p className="mt-1 text-sm text-amber-700">
-                  Una o più scadenze richiedono la tua
-                  attenzione.
-                </p>
-              </div>
-            </div>
-          )}
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Carica un PDF di Booking, Airbnb, una
+              compagnia aerea, un treno o un autonoleggio.
+              TravelG compilerà il modulo e ti lascerà
+              controllare tutto prima del salvataggio.
+            </p>
+          </div>
         </div>
-      )}
+
+        <button
+          type="button"
+          onClick={() =>
+            importFileInputRef.current?.click()
+          }
+          disabled={isImporting}
+          className="mt-5 w-full rounded-2xl bg-violet-600 px-4 py-4 font-bold text-white transition active:scale-[0.99] disabled:cursor-wait disabled:bg-slate-300"
+        >
+          {isImporting
+            ? 'Analisi del PDF in corso...'
+            : '📄 Importa prenotazione PDF'}
+        </button>
+
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={(event) => {
+            void handleImportPdf(event)
+          }}
+          className="hidden"
+        />
+
+        {importMessage && (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+            {importMessage}
+          </div>
+        )}
+
+        {importError && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+            {importError}
+          </div>
+        )}
+
+        {importConfidence !== null && (
+          <div className="mt-4 rounded-2xl bg-white p-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-semibold">
+                Affidabilità del riconoscimento
+              </p>
+
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-sm font-bold text-violet-700">
+                {Math.round(
+                  importConfidence * 100,
+                )}
+                %
+              </span>
+            </div>
+          </div>
+        )}
+
+        {importWarnings.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="font-semibold text-amber-800">
+              Controlla questi dati
+            </p>
+
+            <ul className="mt-2 space-y-1 text-sm text-amber-700">
+              {importWarnings.map(
+                (warning, index) => (
+                  <li
+                    key={`${warning}-${index}`}
+                  >
+                    • {warning}
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {categories.slice(0, 6).map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() =>
+              setCategory(item.value)
+            }
+            className={`rounded-2xl border p-3 text-center text-xs font-semibold transition ${
+              category === item.value
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : 'border-slate-200 bg-white text-slate-600'
+            }`}
+          >
+            <span className="block text-2xl">
+              {item.icon}
+            </span>
+
+            <span className="mt-1 block">
+              {item.label}
+            </span>
+          </button>
+        ))}
+      </div>
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+        className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
       >
-        <div>
-          <label
-            htmlFor="document-title"
-            className="mb-2 block text-sm font-semibold text-slate-700"
-          >
-            Titolo
-          </label>
+        <h2 className="text-lg font-bold">
+          {importedPdf
+            ? 'Controlla i dati riconosciuti'
+            : `Aggiungi ${categoryMap[category].label}`}
+        </h2>
 
-          <input
-            id="document-title"
-            type="text"
-            required
-            className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            placeholder="Es. Prenotazione hotel"
-            value={title}
-            onChange={(event) =>
-              setTitle(event.target.value)
-            }
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="document-category"
-            className="mb-2 block text-sm font-semibold text-slate-700"
-          >
-            Categoria
-          </label>
-
-          <select
-            id="document-category"
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            value={category}
-            onChange={(event) =>
-              setCategory(
-                event.target
-                  .value as TravelDocumentCategory,
-              )
-            }
-          >
-            {categories.map((item) => (
-              <option
-                key={item.value}
-                value={item.value}
-              >
-                {item.icon} {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="document-date"
-            className="mb-2 block text-sm font-semibold text-slate-700"
-          >
-            Data
-          </label>
-
-          <input
-            id="document-date"
-            type="date"
-            className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            value={date}
-            onChange={(event) =>
-              setDate(event.target.value)
-            }
-          />
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="flex items-center gap-2">
-            <span>⏰</span>
-
-            <div>
-              <p className="text-sm font-semibold text-slate-700">
-                Scadenza
-              </p>
-
-              <p className="text-xs text-slate-500">
-                Facoltativa
-              </p>
-            </div>
+        {importedPdf && (
+          <div className="rounded-2xl bg-blue-50 p-4 text-sm text-blue-700">
+            📎 Il PDF <strong>{importedPdf.name}</strong>{' '}
+            verrà allegato automaticamente quando
+            salverai.
           </div>
+        )}
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <input
+          type="text"
+          required
+          value={title}
+          onChange={(event) =>
+            setTitle(event.target.value)
+          }
+          placeholder={
+            isAccommodation
+              ? 'Nome hotel'
+              : isFlight
+                ? 'Volo Milano → Madrid'
+                : isIdentity
+                  ? 'Carta di identità'
+                  : 'Titolo'
+          }
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+        />
+
+        {(isAccommodation ||
+          isFlight ||
+          isTransport) && (
+          <input
+            type="text"
+            value={provider}
+            onChange={(event) =>
+              setProvider(event.target.value)
+            }
+            placeholder={
+              isAccommodation
+                ? 'Piattaforma o struttura, es. Booking'
+                : isFlight
+                  ? 'Compagnia aerea'
+                  : 'Compagnia o autonoleggio'
+            }
+            className="w-full rounded-xl border border-slate-300 px-4 py-3"
+          />
+        )}
+
+        <input
+          type="text"
+          value={referenceCode}
+          onChange={(event) =>
+            setReferenceCode(event.target.value)
+          }
+          placeholder={
+            isIdentity
+              ? 'Numero documento'
+              : 'Codice prenotazione'
+          }
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+        />
+
+        {(isFlight || isTransport) && (
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={origin}
+              onChange={(event) =>
+                setOrigin(event.target.value)
+              }
+              placeholder="Da"
+              className="rounded-xl border border-slate-300 px-4 py-3"
+            />
+
+            <input
+              type="text"
+              value={destination}
+              onChange={(event) =>
+                setDestination(
+                  event.target.value,
+                )
+              }
+              placeholder="A"
+              className="rounded-xl border border-slate-300 px-4 py-3"
+            />
+          </div>
+        )}
+
+        {(isAccommodation ||
+          isFlight ||
+          isTransport) && (
+          <>
             <div>
-              <label
-                htmlFor="document-expiration"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Data di scadenza
-              </label>
+              <p className="mb-2 text-sm font-semibold text-slate-700">
+                {isAccommodation
+                  ? 'Check-in'
+                  : 'Partenza'}
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) =>
+                    setStartDate(
+                      event.target.value,
+                    )
+                  }
+                  className="rounded-xl border border-slate-300 px-3 py-3"
+                />
+
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(event) =>
+                    setStartTime(
+                      event.target.value,
+                    )
+                  }
+                  className="rounded-xl border border-slate-300 px-3 py-3"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-700">
+                {isAccommodation
+                  ? 'Check-out'
+                  : 'Arrivo'}
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) =>
+                    setEndDate(
+                      event.target.value,
+                    )
+                  }
+                  className="rounded-xl border border-slate-300 px-3 py-3"
+                />
+
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(event) =>
+                    setEndTime(
+                      event.target.value,
+                    )
+                  }
+                  className="rounded-xl border border-slate-300 px-3 py-3"
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {!isAccommodation &&
+          !isFlight &&
+          !isTransport && (
+            <input
+              type="date"
+              value={date}
+              onChange={(event) =>
+                setDate(event.target.value)
+              }
+              className="w-full rounded-xl border border-slate-300 px-4 py-3"
+            />
+          )}
+
+        {isAccommodation && (
+          <>
+            <input
+              type="text"
+              value={address}
+              onChange={(event) =>
+                setAddress(event.target.value)
+              }
+              placeholder="Indirizzo hotel"
+              className="w-full rounded-xl border border-slate-300 px-4 py-3"
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="tel"
+                value={phone}
+                onChange={(event) =>
+                  setPhone(event.target.value)
+                }
+                placeholder="Telefono"
+                className="rounded-xl border border-slate-300 px-4 py-3"
+              />
 
               <input
-                id="document-expiration"
+                type="email"
+                value={email}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
+                placeholder="Email"
+                className="rounded-xl border border-slate-300 px-4 py-3"
+              />
+            </div>
+          </>
+        )}
+
+        <input
+          type="text"
+          value={website}
+          onChange={(event) =>
+            setWebsite(event.target.value)
+          }
+          placeholder="Link della prenotazione o sito"
+          className="w-full rounded-xl border border-slate-300 px-4 py-3"
+        />
+
+        {(isIdentity || isInsurance) && (
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-700">
+              Scadenza
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <input
                 type="date"
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 value={expiresAt}
                 onChange={(event) =>
                   setExpiresAt(event.target.value)
                 }
+                className="rounded-xl border border-slate-300 px-3 py-3"
               />
-            </div>
-
-            <div>
-              <label
-                htmlFor="document-reminder"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Preavviso in giorni
-              </label>
 
               <input
-                id="document-reminder"
                 type="number"
                 min="0"
-                step="1"
-                disabled={!expiresAt}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 value={reminderDays}
                 onChange={(event) =>
-                  setReminderDays(event.target.value)
+                  setReminderDays(
+                    event.target.value,
+                  )
                 }
+                placeholder="Preavviso"
+                className="rounded-xl border border-slate-300 px-3 py-3"
               />
             </div>
           </div>
+        )}
 
-          {expiresAt && (
-            <p className="mt-3 text-xs text-slate-500">
-              Riceverai un avviso visivo{' '}
-              {reminderDays
-                ? `${reminderDays} giorni prima della scadenza.`
-                : 'alla scadenza.'}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label
-            htmlFor="document-notes"
-            className="mb-2 block text-sm font-semibold text-slate-700"
-          >
-            Note
-          </label>
-
-          <textarea
-            id="document-notes"
-            className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            rows={4}
-            placeholder="Numero prenotazione, indirizzo, orari..."
-            value={notes}
-            onChange={(event) =>
-              setNotes(event.target.value)
-            }
-          />
-        </div>
+        <textarea
+          value={notes}
+          onChange={(event) =>
+            setNotes(event.target.value)
+          }
+          rows={3}
+          placeholder="Note, terminal, gate, condizioni..."
+          className="w-full resize-none rounded-xl border border-slate-300 px-4 py-3"
+        />
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-700 active:scale-[0.99]"
+          disabled={
+            isImporting ||
+            pendingAttachment !== null
+          }
+          className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white disabled:cursor-wait disabled:bg-slate-300"
         >
-          Salva documento
+          {pendingAttachment
+            ? 'Salvataggio PDF...'
+            : importedPdf
+              ? 'Conferma e salva prenotazione'
+              : 'Salva nel Wallet'}
         </button>
       </form>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {documents.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center">
-            <div className="text-4xl">🗂️</div>
-
-            <p className="mt-3 font-semibold">
-              Nessun documento salvato
-            </p>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Aggiungi prenotazioni, biglietti e
-              informazioni importanti.
-            </p>
+          <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
+            Nessun elemento nel Wallet
           </div>
         ) : (
           documents.map((document) => (

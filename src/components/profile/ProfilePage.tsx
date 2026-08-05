@@ -89,7 +89,7 @@ export default function ProfilePage({
     }
 
     const confirmed = window.confirm(
-      'Importando il backup verranno sostituiti i dati TravelMate presenti su questo dispositivo. Continuare?',
+      'Importando il backup verranno sostituiti i dati TravelG presenti su questo dispositivo. Continuare?',
     )
 
     if (!confirmed) {
@@ -105,7 +105,7 @@ export default function ProfilePage({
         await importTravelMateBackup(file)
 
       setBackupMessage(
-        `${result.importedKeys} sezioni importate correttamente. TravelMate verrà ricaricata.`,
+        `${result.importedKeys} sezioni importate correttamente. TravelG verrà ricaricata.`,
       )
 
       window.setTimeout(() => {
@@ -138,7 +138,7 @@ export default function ProfilePage({
         </h2>
 
         <p className="mt-1 text-slate-500">
-          Benvenuto in TravelMate
+          Benvenuto in TravelG
         </p>
       </div>
 
@@ -242,7 +242,7 @@ export default function ProfilePage({
 
         <ul className="mt-4 space-y-3 text-sm text-slate-600">
           <li>☁️ Sincronizzazione cloud</li>
-          <li>🤖 TravelMate AI</li>
+          <li>🤖 TravelG AI</li>
           <li>📄 Wallet documenti</li>
           <li>🗺️ Mappe offline</li>
           <li>📍 Posizione in tempo reale</li>

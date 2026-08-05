@@ -11,9 +11,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon.svg'],
       manifest: {
-        name: 'TravelMate',
-        short_name: 'TravelMate',
-        description: 'Il tuo compagno di viaggio',
+        name: 'TravelG',
+        short_name: 'TravelG',
+        description:
+          'Il tuo viaggio, tutto in un posto',
         theme_color: '#0284c7',
         background_color: '#f8fafc',
         display: 'standalone',
@@ -36,7 +37,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: [
+          '**/*.{js,css,html,ico,png,svg,woff2}',
+        ],
       },
       devOptions: {
         enabled: true,

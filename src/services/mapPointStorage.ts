@@ -1,6 +1,6 @@
 import type { MapPoint } from '../types/map'
 
-const MAP_POINTS_STORAGE_KEY = 'travelmate-map-points'
+const MAP_POINTS_STORAGE_KEY = 'TravelG-map-points'
 
 export function loadMapPoints(): MapPoint[] {
   const storedValue = localStorage.getItem(

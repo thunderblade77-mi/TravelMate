@@ -1,7 +1,7 @@
 import { TravelMateLogo } from '../ui/TravelMateLogo'
 import { UserIcon } from '../icons'
 
-const APP_NAME = 'TravelMate'
+const APP_NAME = 'TravelG'
 
 export function HomeHeader() {
   return (

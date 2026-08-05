@@ -1132,7 +1132,7 @@ export default function RoadbookPage({
                             }
                             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition active:scale-95"
                           >
-                            🗺️ Mappa TravelMate
+                            🗺️ Mappa TravelG
                           </button>
                         ) : (
                           <button

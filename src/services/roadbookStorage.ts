@@ -4,7 +4,7 @@ import type {
   RoadbookData,
 } from '../types/roadbook'
 
-const STORAGE_KEY = 'travelmate-roadbook'
+const STORAGE_KEY = 'TravelG-roadbook'
 
 function emptyDatabase(): RoadbookData {
   return {
