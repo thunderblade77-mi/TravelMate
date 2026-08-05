@@ -5,14 +5,12 @@ import {
   useState,
 } from 'react'
 
+import { supabase } from '../lib/supabase'
+
 import type {
   Expense,
   ExpenseCategory,
 } from '../types/expense'
-
-const STORAGE_KEY = 'travelmate-expenses'
-const EXPENSES_UPDATED_EVENT =
-  'travelmate-expenses-updated'
 
 type ExpenseInput = Omit<
   Expense,
@@ -32,6 +30,21 @@ type CategoryTotal = {
   percentage: number
 }
 
+type CloudExpenseRow = {
+  id: string
+  trip_id: string
+  created_by: string
+  title: string
+  amount: number | string
+  category: ExpenseCategory
+  expense_date: string
+  paid_by: string
+  payment_method: Expense['paymentMethod']
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
 function createId(): string {
   if (
     typeof crypto !== 'undefined' &&
@@ -45,125 +58,193 @@ function createId(): string {
     .slice(2)}`
 }
 
-function readExpenses(): Expense[] {
-  try {
-    const storedExpenses =
-      localStorage.getItem(STORAGE_KEY)
-
-    if (!storedExpenses) {
-      return []
-    }
-
-    const parsedExpenses: unknown =
-      JSON.parse(storedExpenses)
-
-    if (!Array.isArray(parsedExpenses)) {
-      return []
-    }
-
-    return parsedExpenses.filter(
-      (expense): expense is Expense =>
-        typeof expense === 'object' &&
-        expense !== null &&
-        typeof expense.id === 'string' &&
-        typeof expense.tripId === 'string' &&
-        typeof expense.title === 'string' &&
-        typeof expense.amount === 'number' &&
-        Number.isFinite(expense.amount),
-    )
-  } catch {
-    return []
+function mapCloudExpense(
+  row: CloudExpenseRow,
+): Expense {
+  return {
+    id: row.id,
+    tripId: row.trip_id,
+    title: row.title,
+    amount: Math.max(
+      0,
+      Number(row.amount) || 0,
+    ),
+    category: row.category,
+    date: row.expense_date,
+    paidBy: row.paid_by,
+    paymentMethod: row.payment_method,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
-}
-
-function saveExpenses(expenses: Expense[]): void {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(expenses),
-  )
-
-  window.dispatchEvent(
-    new CustomEvent(EXPENSES_UPDATED_EVENT),
-  )
 }
 
 export function useExpenses(
   tripId?: string,
   budget = 0,
 ) {
-  const [allExpenses, setAllExpenses] =
-    useState<Expense[]>(() => readExpenses())
+  const [expenses, setExpenses] =
+    useState<Expense[]>([])
 
-  const reloadExpenses = useCallback(() => {
-    setAllExpenses(readExpenses())
-  }, [])
+  const [userId, setUserId] =
+    useState<string | null>(null)
 
-  useEffect(() => {
-    const handleStorage = (
-      event: StorageEvent,
-    ) => {
-      if (
-        event.key === STORAGE_KEY ||
-        event.key === null
-      ) {
-        reloadExpenses()
+  const [loading, setLoading] =
+    useState(Boolean(tripId))
+
+  const [error, setError] =
+    useState<string | null>(null)
+
+  const reloadExpenses =
+    useCallback(async () => {
+      if (!tripId) {
+        setExpenses([])
+        setLoading(false)
+        setError(null)
+        return
       }
-    }
 
-    const handleExpensesUpdated = () => {
-      reloadExpenses()
-    }
+      setLoading(true)
 
-    window.addEventListener(
-      'storage',
-      handleStorage,
-    )
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
 
-    window.addEventListener(
-      EXPENSES_UPDATED_EVENT,
-      handleExpensesUpdated,
-    )
-
-    return () => {
-      window.removeEventListener(
-        'storage',
-        handleStorage,
-      )
-
-      window.removeEventListener(
-        EXPENSES_UPDATED_EVENT,
-        handleExpensesUpdated,
-      )
-    }
-  }, [reloadExpenses])
-
-  const expenses = useMemo(() => {
-    if (!tripId) {
-      return []
-    }
-
-    return allExpenses
-      .filter(
-        (expense) => expense.tripId === tripId,
-      )
-      .sort((firstExpense, secondExpense) => {
-        const dateComparison =
-          secondExpense.date.localeCompare(
-            firstExpense.date,
-          )
-
-        if (dateComparison !== 0) {
-          return dateComparison
+        if (userError) {
+          throw userError
         }
 
-        return secondExpense.createdAt.localeCompare(
-          firstExpense.createdAt,
+        if (!user) {
+          setUserId(null)
+          setExpenses([])
+          setError(
+            'Devi effettuare il login.',
+          )
+          return
+        }
+
+        setUserId(user.id)
+
+        const {
+          data,
+          error: expensesError,
+        } = await supabase
+          .from('expenses')
+          .select(
+            `
+              id,
+              trip_id,
+              created_by,
+              title,
+              amount,
+              category,
+              expense_date,
+              payment_method,
+              paid_by,
+              notes,
+              created_at,
+              updated_at
+            `,
+          )
+          .eq('trip_id', tripId)
+          .order('expense_date', {
+            ascending: false,
+          })
+          .order('created_at', {
+            ascending: false,
+          })
+
+        if (expensesError) {
+          throw expensesError
+        }
+
+        setExpenses(
+          (data ?? []).map((row) =>
+            mapCloudExpense(
+              row as CloudExpenseRow,
+            ),
+          ),
         )
-      })
-  }, [allExpenses, tripId])
+
+        setError(null)
+      } catch (loadError) {
+        console.error(
+          'Errore caricamento spese:',
+          loadError,
+        )
+
+        setExpenses([])
+        setError(
+          'Impossibile caricare le spese.',
+        )
+      } finally {
+        setLoading(false)
+      }
+    }, [tripId])
+
+  useEffect(() => {
+    void reloadExpenses()
+  }, [reloadExpenses])
+
+  useEffect(() => {
+    if (!tripId) {
+      return
+    }
+
+    const channel = supabase
+      .channel(
+        `travelg-expenses-${tripId}`,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+          filter: `trip_id=eq.${tripId}`,
+        },
+        () => {
+          void reloadExpenses()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [tripId, reloadExpenses])
+
+  const sortedExpenses = useMemo(
+    () =>
+      [...expenses].sort(
+        (firstExpense, secondExpense) => {
+          const dateComparison =
+            secondExpense.date.localeCompare(
+              firstExpense.date,
+            )
+
+          if (dateComparison !== 0) {
+            return dateComparison
+          }
+
+          return secondExpense.createdAt.localeCompare(
+            firstExpense.createdAt,
+          )
+        },
+      ),
+    [expenses],
+  )
 
   const addExpense = useCallback(
     (input: ExpenseInput): Expense => {
+      if (!userId) {
+        throw new Error(
+          'Utente non autenticato.',
+        )
+      }
+
       const now = new Date().toISOString()
 
       const newExpense: Expense = {
@@ -177,17 +258,52 @@ export function useExpenses(
         updatedAt: now,
       }
 
-      const nextExpenses = [
-        ...readExpenses(),
+      setExpenses((currentExpenses) => [
         newExpense,
-      ]
+        ...currentExpenses,
+      ])
 
-      saveExpenses(nextExpenses)
-      setAllExpenses(nextExpenses)
+      void supabase
+        .from('expenses')
+        .insert({
+          id: newExpense.id,
+          trip_id: newExpense.tripId,
+          created_by: userId,
+          title: newExpense.title,
+          amount: newExpense.amount,
+          category: newExpense.category,
+          expense_date: newExpense.date,
+          paid_by: newExpense.paidBy,
+          notes: newExpense.notes,
+          created_at: newExpense.createdAt,
+          updated_at: newExpense.updatedAt,
+        })
+        .then(({ error: insertError }) => {
+          if (!insertError) {
+            setError(null)
+            return
+          }
+
+          console.error(
+            'Errore aggiunta spesa:',
+            insertError,
+          )
+
+          setExpenses((currentExpenses) =>
+            currentExpenses.filter(
+              (expense) =>
+                expense.id !== newExpense.id,
+            ),
+          )
+
+          setError(
+            'Impossibile aggiungere la spesa.',
+          )
+        })
 
       return newExpense
     },
-    [],
+    [userId],
   )
 
   const updateExpense = useCallback(
@@ -195,93 +311,196 @@ export function useExpenses(
       expenseId: string,
       updates: ExpenseUpdate,
     ): Expense | null => {
-      let updatedExpense: Expense | null = null
+      const currentExpense =
+        expenses.find(
+          (expense) =>
+            expense.id === expenseId,
+        )
 
-      const nextExpenses = readExpenses().map(
-        (expense) => {
-          if (expense.id !== expenseId) {
-            return expense
-          }
-
-          updatedExpense = {
-            ...expense,
-            ...updates,
-            title:
-              updates.title !== undefined
-                ? updates.title.trim()
-                : expense.title,
-            amount:
-              updates.amount !== undefined
-                ? Math.max(0, updates.amount)
-                : expense.amount,
-            paidBy:
-              updates.paidBy !== undefined
-                ? updates.paidBy.trim()
-                : expense.paidBy,
-            notes:
-              updates.notes !== undefined
-                ? updates.notes.trim()
-                : expense.notes,
-            updatedAt: new Date().toISOString(),
-          }
-
-          return updatedExpense
-        },
-      )
-
-      if (!updatedExpense) {
+      if (!currentExpense) {
         return null
       }
 
-      saveExpenses(nextExpenses)
-      setAllExpenses(nextExpenses)
+      const updatedExpense: Expense = {
+        ...currentExpense,
+        ...updates,
+        title:
+          updates.title !== undefined
+            ? updates.title.trim()
+            : currentExpense.title,
+        amount:
+          updates.amount !== undefined
+            ? Math.max(0, updates.amount)
+            : currentExpense.amount,
+        paidBy:
+          updates.paidBy !== undefined
+            ? updates.paidBy.trim()
+            : currentExpense.paidBy,
+        notes:
+          updates.notes !== undefined
+            ? updates.notes.trim()
+            : currentExpense.notes,
+        updatedAt: new Date().toISOString(),
+      }
+
+      setExpenses((currentExpenses) =>
+        currentExpenses.map((expense) =>
+          expense.id === expenseId
+            ? updatedExpense
+            : expense,
+        ),
+      )
+
+      void supabase
+        .from('expenses')
+        .update({
+          title: updatedExpense.title,
+          amount: updatedExpense.amount,
+          category: updatedExpense.category,
+          expense_date: updatedExpense.date,
+          paid_by: updatedExpense.paidBy,
+          notes: updatedExpense.notes,
+          updated_at:
+            updatedExpense.updatedAt,
+        })
+        .eq('id', expenseId)
+        .then(({ error: updateError }) => {
+          if (!updateError) {
+            setError(null)
+            return
+          }
+
+          console.error(
+            'Errore aggiornamento spesa:',
+            updateError,
+          )
+
+          setExpenses((currentExpenses) =>
+            currentExpenses.map((expense) =>
+              expense.id === expenseId
+                ? currentExpense
+                : expense,
+            ),
+          )
+
+          setError(
+            'Impossibile aggiornare la spesa.',
+          )
+        })
 
       return updatedExpense
     },
-    [],
+    [expenses],
   )
 
   const deleteExpense = useCallback(
     (expenseId: string): void => {
-      const nextExpenses = readExpenses().filter(
-        (expense) => expense.id !== expenseId,
+      const deletedExpense =
+        expenses.find(
+          (expense) =>
+            expense.id === expenseId,
+        )
+
+      setExpenses((currentExpenses) =>
+        currentExpenses.filter(
+          (expense) =>
+            expense.id !== expenseId,
+        ),
       )
 
-      saveExpenses(nextExpenses)
-      setAllExpenses(nextExpenses)
+      void supabase
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId)
+        .then(({ error: deleteError }) => {
+          if (!deleteError) {
+            setError(null)
+            return
+          }
+
+          console.error(
+            'Errore eliminazione spesa:',
+            deleteError,
+          )
+
+          if (deletedExpense) {
+            setExpenses(
+              (currentExpenses) => [
+                ...currentExpenses,
+                deletedExpense,
+              ],
+            )
+          }
+
+          setError(
+            'Impossibile eliminare la spesa.',
+          )
+        })
     },
-    [],
+    [expenses],
   )
 
-  const deleteExpensesByTrip = useCallback(
-    (targetTripId: string): void => {
-      const nextExpenses = readExpenses().filter(
-        (expense) =>
-          expense.tripId !== targetTripId,
-      )
+  const deleteExpensesByTrip =
+    useCallback(
+      (targetTripId: string): void => {
+        const previousExpenses = expenses
 
-      saveExpenses(nextExpenses)
-      setAllExpenses(nextExpenses)
-    },
-    [],
-  )
+        setExpenses((currentExpenses) =>
+          currentExpenses.filter(
+            (expense) =>
+              expense.tripId !==
+              targetTripId,
+          ),
+        )
+
+        void supabase
+          .from('expenses')
+          .delete()
+          .eq('trip_id', targetTripId)
+          .then(
+            ({
+              error: deleteError,
+            }) => {
+              if (!deleteError) {
+                setError(null)
+                return
+              }
+
+              console.error(
+                'Errore eliminazione spese viaggio:',
+                deleteError,
+              )
+
+              setExpenses(previousExpenses)
+
+              setError(
+                'Impossibile eliminare le spese del viaggio.',
+              )
+            },
+          )
+      },
+      [expenses],
+    )
 
   const getExpenseById = useCallback(
-    (expenseId: string): Expense | undefined =>
-      allExpenses.find(
-        (expense) => expense.id === expenseId,
+    (
+      expenseId: string,
+    ): Expense | undefined =>
+      expenses.find(
+        (expense) =>
+          expense.id === expenseId,
       ),
-    [allExpenses],
+    [expenses],
   )
 
   const totalSpent = useMemo(
     () =>
-      expenses.reduce(
+      sortedExpenses.reduce(
         (total, expense) =>
           total + expense.amount,
         0,
       ),
-    [expenses],
+    [sortedExpenses],
   )
 
   const remainingBudget = useMemo(
@@ -289,16 +508,19 @@ export function useExpenses(
     [budget, totalSpent],
   )
 
-  const budgetUsedPercentage = useMemo(() => {
-    if (budget <= 0) {
-      return 0
-    }
+  const budgetUsedPercentage =
+    useMemo(() => {
+      if (budget <= 0) {
+        return 0
+      }
 
-    return Math.max(
-      0,
-      Math.round((totalSpent / budget) * 100),
-    )
-  }, [budget, totalSpent])
+      return Math.max(
+        0,
+        Math.round(
+          (totalSpent / budget) * 100,
+        ),
+      )
+    }, [budget, totalSpent])
 
   const categoryTotals = useMemo<
     CategoryTotal[]
@@ -308,7 +530,7 @@ export function useExpenses(
       number
     >()
 
-    expenses.forEach((expense) => {
+    sortedExpenses.forEach((expense) => {
       const currentTotal =
         totals.get(expense.category) ?? 0
 
@@ -318,30 +540,40 @@ export function useExpenses(
       )
     })
 
-    return Array.from(totals.entries())
+    return Array.from(
+      totals.entries(),
+    )
       .map(([category, total]) => ({
         category,
         total,
         percentage:
           totalSpent > 0
             ? Math.round(
-                (total / totalSpent) * 100,
+                (total / totalSpent) *
+                  100,
               )
             : 0,
       }))
       .sort(
-        (firstCategory, secondCategory) =>
+        (
+          firstCategory,
+          secondCategory,
+        ) =>
           secondCategory.total -
           firstCategory.total,
       )
-  }, [expenses, totalSpent])
+  }, [sortedExpenses, totalSpent])
 
   const paidByTotals = useMemo(() => {
-    const totals = new Map<string, number>()
+    const totals = new Map<
+      string,
+      number
+    >()
 
-    expenses.forEach((expense) => {
+    sortedExpenses.forEach((expense) => {
       const paidBy =
-        expense.paidBy.trim() || 'Non specificato'
+        expense.paidBy.trim() ||
+        'Non specificato'
 
       totals.set(
         paidBy,
@@ -350,26 +582,34 @@ export function useExpenses(
       )
     })
 
-    return Array.from(totals.entries())
+    return Array.from(
+      totals.entries(),
+    )
       .map(([paidBy, total]) => ({
         paidBy,
         total,
       }))
       .sort(
-        (firstPerson, secondPerson) =>
+        (
+          firstPerson,
+          secondPerson,
+        ) =>
           secondPerson.total -
           firstPerson.total,
       )
-  }, [expenses])
+  }, [sortedExpenses])
 
   return {
-    expenses,
-    expenseCount: expenses.length,
+    expenses: sortedExpenses,
+    expenseCount:
+      sortedExpenses.length,
     totalSpent,
     remainingBudget,
     budgetUsedPercentage,
     categoryTotals,
     paidByTotals,
+    loading,
+    error,
     addExpense,
     updateExpense,
     deleteExpense,
