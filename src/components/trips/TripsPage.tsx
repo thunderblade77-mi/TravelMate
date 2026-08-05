@@ -8,6 +8,8 @@ type TripsPageProps = {
   onCreateTrip: () => void
   onSelectTrip: (tripId: string) => void
   onRemoveTrip?: (tripId: string) => void
+  onJoinTrip?: () => void
+  onShareTrip?: (trip: Trip) => void
   formatDate: (date: string) => string
   formatCurrency: (amount: number) => string
 }
@@ -15,6 +17,8 @@ type TripsPageProps = {
 export default function TripsPage({
   trips,
   activeTrip,
+  onJoinTrip,
+  onShareTrip,
   onCreateTrip,
   onSelectTrip,
   onRemoveTrip,
@@ -68,6 +72,13 @@ export default function TripsPage({
           className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition active:scale-95"
         >
           Nuovo
+          <button
+  type="button"
+  onClick={onJoinTrip}
+  className="rounded-full border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-600 transition active:scale-95"
+>
+  🔑 Entra con codice
+</button>
         </button>
       </div>
 
@@ -177,6 +188,19 @@ export default function TripsPage({
                       ✓ Seleziona viaggio
                     </button>
 
+                    {onShareTrip && (
+  <button
+    type="button"
+    onClick={() => {
+      onShareTrip(trip)
+      setOpenMenuTripId(null)
+    }}
+    className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+  >
+    👥 Condividi viaggio
+  </button>
+)}
+
                     <button
                       type="button"
                       onClick={() =>
@@ -185,6 +209,16 @@ export default function TripsPage({
                       disabled={!onRemoveTrip}
                       className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-300"
                     >
+                      <button
+  type="button"
+  onClick={() => {
+    onShareTrip?.(trip)
+    setOpenMenuTripId(null)
+  }}
+  className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+>
+  👥 Condividi viaggio
+</button>
                       🗑️ Elimina viaggio
                     </button>
                   </div>

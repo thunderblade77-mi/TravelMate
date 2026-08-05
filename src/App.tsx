@@ -14,6 +14,7 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
+import type { Trip } from './types/travel'
 import AssistantPage from './components/assistant/AssistantPage'
 import ChecklistPage from './components/checklist/ChecklistPage'
 import CreateTripPage from './components/create-trip/CreateTripPage'
@@ -319,14 +320,67 @@ export default function App() {
     navigate('/')
   }
 
-  function handleSelectTrip(tripId: string) {
-    selectTrip(tripId)
-    navigate('/')
+ function handleSelectTrip(tripId: string) {
+  selectTrip(tripId)
+  navigate('/')
+}
+async function handleShareTrip(trip: Trip) {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('invite_code')
+    .eq('id', trip.id)
+    .single()
+
+  if (error || !data?.invite_code) {
+    window.alert(
+      'Impossibile recuperare il codice invito.',
+    )
+    return
   }
 
-  if (authLoading) {
-    return <AuthLoadingScreen />
+  await navigator.clipboard.writeText(
+    data.invite_code,
+  )
+
+  window.alert(
+    `Codice copiato!\n\n${data.invite_code}`,
+  )
+}
+
+async function handleJoinTrip() {
+  const inviteCode = window.prompt(
+    'Inserisci il codice invito del viaggio',
+  )
+
+  if (!inviteCode?.trim()) {
+    return
   }
+
+  const { data, error } = await supabase.rpc(
+    'join_trip_by_code',
+    {
+      invitation_code: inviteCode.trim(),
+    },
+  )
+
+  if (error) {
+    window.alert(error.message)
+    return
+  }
+
+  if (data) {
+    selectTrip(data)
+    navigate('/')
+
+    window.alert(
+      '🎉 Viaggio aggiunto con successo!',
+    )
+  }
+}
+
+if (authLoading) {
+  return <AuthLoadingScreen />
+}
 
   if (!session) {
     return (
@@ -480,8 +534,10 @@ export default function App() {
                 <TripsPage
                   trips={trips}
                   activeTrip={activeTrip}
+                  onJoinTrip={handleJoinTrip}
                   onCreateTrip={openCreateTripPage}
                   onSelectTrip={handleSelectTrip}
+                  onShareTrip={handleShareTrip}
                   onRemoveTrip={removeTrip}
                   formatDate={formatDate}
                   formatCurrency={formatCurrency}
