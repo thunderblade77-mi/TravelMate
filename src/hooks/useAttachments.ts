@@ -2,46 +2,35 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react'
-import {
-  openDB,
-  type DBSchema,
-} from 'idb'
+
+import { supabase } from '../lib/supabase'
 
 import type {
   CreateTravelAttachmentInput,
   TravelAttachment,
 } from '../types/attachment'
 
-type StoredTravelAttachment = Omit<
-  TravelAttachment,
-  'url'
-> & {
-  blob: Blob
-}
+const BUCKET_NAME = 'travel-attachments'
+const SIGNED_URL_DURATION = 60 * 60
 
-interface TravelMateDatabase extends DBSchema {
-  attachments: {
-    key: string
-    value: StoredTravelAttachment
-    indexes: {
-      'by-document-id': string
-    }
-  }
+type CloudAttachmentRow = {
+  id: string
+  trip_id: string
+  document_id: string
+  created_by: string
+  name: string
+  mime_type: string
+  file_size: number | string
+  storage_path: string
+  created_at: string
 }
-
-const DATABASE_NAME = 'travelmate'
-const DATABASE_VERSION = 1
-const STORE_NAME = 'attachments'
-const ATTACHMENTS_CHANGED_EVENT =
-  'travelmate-attachments-changed'
 
 function createAttachmentId(): string {
   if (
     typeof crypto !== 'undefined' &&
-    crypto.randomUUID
+    typeof crypto.randomUUID === 'function'
   ) {
     return crypto.randomUUID()
   }
@@ -51,63 +40,16 @@ function createAttachmentId(): string {
     .slice(2)}`
 }
 
-const databasePromise =
-  openDB<TravelMateDatabase>(
-    DATABASE_NAME,
-    DATABASE_VERSION,
-    {
-      upgrade(database) {
-        if (
-          !database.objectStoreNames.contains(
-            STORE_NAME,
-          )
-        ) {
-          const attachmentStore =
-            database.createObjectStore(
-              STORE_NAME,
-              {
-                keyPath: 'id',
-              },
-            )
-
-          attachmentStore.createIndex(
-            'by-document-id',
-            'documentId',
-          )
-        }
-      },
-    },
-  )
-
-function notifyAttachmentsChanged(
-  documentId: string,
-) {
-  window.dispatchEvent(
-    new CustomEvent(
-      ATTACHMENTS_CHANGED_EVENT,
-      {
-        detail: {
-          documentId,
-        },
-      },
-    ),
-  )
-}
-
-async function readDocumentAttachments(
-  documentId: string,
-): Promise<StoredTravelAttachment[]> {
-  const database = await databasePromise
-
-  const storedAttachments =
-    await database.getAllFromIndex(
-      STORE_NAME,
-      'by-document-id',
-      documentId,
-    )
-
-  return storedAttachments.sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
+function sanitizeFileName(
+  fileName: string,
+): string {
+  return (
+    fileName
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') ||
+    'allegato'
   )
 }
 
@@ -120,130 +62,141 @@ export function useAttachments(
   const [isLoading, setIsLoading] =
     useState(Boolean(documentId))
 
-  const [error, setError] = useState<
-    string | null
-  >(null)
-
-  const generatedUrlsRef = useRef<
-    Set<string>
-  >(new Set())
-
-  const revokeGeneratedUrls =
-    useCallback(() => {
-      generatedUrlsRef.current.forEach(
-        (url) => {
-          URL.revokeObjectURL(url)
-        },
-      )
-
-      generatedUrlsRef.current.clear()
-    }, [])
+  const [error, setError] =
+    useState<string | null>(null)
 
   const loadAttachments =
     useCallback(async () => {
-      revokeGeneratedUrls()
-
       if (!documentId) {
         setAttachments([])
         setIsLoading(false)
         setError(null)
-
         return
       }
 
       setIsLoading(true)
 
       try {
-        const storedAttachments =
-          await readDocumentAttachments(
-            documentId,
+        const {
+          data,
+          error: attachmentsError,
+        } = await supabase
+          .from('travel_attachments')
+          .select(
+            `
+              id,
+              trip_id,
+              document_id,
+              created_by,
+              name,
+              mime_type,
+              file_size,
+              storage_path,
+              created_at
+            `,
           )
+          .eq('document_id', documentId)
+          .order('created_at', {
+            ascending: false,
+          })
+
+        if (attachmentsError) {
+          throw attachmentsError
+        }
+
+        const rows =
+          (data ?? []) as CloudAttachmentRow[]
 
         const loadedAttachments =
-          storedAttachments.map(
-            (attachment) => {
-              const url =
-                URL.createObjectURL(
-                  attachment.blob,
+          await Promise.all(
+            rows.map(async (row) => {
+              const {
+                data: signedUrlData,
+                error: signedUrlError,
+              } = await supabase.storage
+                .from(BUCKET_NAME)
+                .createSignedUrl(
+                  row.storage_path,
+                  SIGNED_URL_DURATION,
                 )
 
-              generatedUrlsRef.current.add(
-                url,
-              )
-
-              return {
-                id: attachment.id,
-                documentId:
-                  attachment.documentId,
-                name: attachment.name,
-                mimeType:
-                  attachment.mimeType,
-                size: attachment.size,
-                createdAt:
-                  attachment.createdAt,
-                url,
+              if (signedUrlError) {
+                console.error(
+                  'Errore URL firmato allegato:',
+                  signedUrlError,
+                )
               }
-            },
+
+              const attachment: TravelAttachment = {
+                id: row.id,
+                documentId: row.document_id,
+                name: row.name,
+                mimeType: row.mime_type,
+                size:
+                  Number(row.file_size) || 0,
+                url:
+                  signedUrlData?.signedUrl ??
+                  '',
+                createdAt: row.created_at,
+              }
+
+              return attachment
+            }),
           )
 
-        setAttachments(loadedAttachments)
+        setAttachments(
+          loadedAttachments.filter(
+            (attachment) =>
+              Boolean(attachment.url),
+          ),
+        )
+
         setError(null)
       } catch (loadError) {
         console.error(
-          'Errore durante il caricamento degli allegati:',
+          'Errore caricamento allegati cloud:',
           loadError,
         )
 
         setAttachments([])
+
         setError(
           'Impossibile caricare gli allegati.',
         )
       } finally {
         setIsLoading(false)
       }
-    }, [
-      documentId,
-      revokeGeneratedUrls,
-    ])
+    }, [documentId])
 
   useEffect(() => {
     void loadAttachments()
-
-    return () => {
-      revokeGeneratedUrls()
-    }
-  }, [
-    loadAttachments,
-    revokeGeneratedUrls,
-  ])
+  }, [loadAttachments])
 
   useEffect(() => {
-    function handleAttachmentsChanged(
-      event: Event,
-    ) {
-      const customEvent =
-        event as CustomEvent<{
-          documentId?: string
-        }>
-
-      if (
-        customEvent.detail?.documentId ===
-        documentId
-      ) {
-        void loadAttachments()
-      }
+    if (!documentId) {
+      return
     }
 
-    window.addEventListener(
-      ATTACHMENTS_CHANGED_EVENT,
-      handleAttachmentsChanged,
-    )
+    const channel = supabase
+      .channel(
+        `travelg-attachments-${documentId}`,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'travel_attachments',
+          filter: `document_id=eq.${documentId}`,
+        },
+        () => {
+          void loadAttachments()
+        },
+      )
+      .subscribe()
 
     return () => {
-      window.removeEventListener(
-        ATTACHMENTS_CHANGED_EVENT,
-        handleAttachmentsChanged,
-      )
+      void supabase.removeChannel(channel)
     }
   }, [documentId, loadAttachments])
 
@@ -251,7 +204,45 @@ export function useAttachments(
     input: CreateTravelAttachmentInput,
   ): Promise<TravelAttachment> {
     try {
-      const response = await fetch(input.url)
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        throw userError
+      }
+
+      if (!user) {
+        throw new Error(
+          'Utente non autenticato.',
+        )
+      }
+
+      const {
+        data: document,
+        error: documentError,
+      } = await supabase
+        .from('travel_documents')
+        .select('trip_id')
+        .eq('id', input.documentId)
+        .single()
+
+      if (
+        documentError ||
+        !document?.trip_id
+      ) {
+        throw (
+          documentError ??
+          new Error(
+            'Documento non trovato.',
+          )
+        )
+      }
+
+      const response = await fetch(
+        input.url,
+      )
 
       if (!response.ok) {
         throw new Error(
@@ -261,56 +252,118 @@ export function useAttachments(
 
       const blob = await response.blob()
 
-      const attachment: TravelAttachment = {
-        id: createAttachmentId(),
-        documentId: input.documentId,
-        name: input.name,
-        mimeType:
-          input.mimeType ||
-          blob.type ||
-          'application/octet-stream',
-        size: input.size || blob.size,
-        url: input.url,
-        createdAt:
-          new Date().toISOString(),
-      }
+      const attachmentId =
+        createAttachmentId()
 
-      const storedAttachment: StoredTravelAttachment =
-        {
-          id: attachment.id,
-          documentId:
-            attachment.documentId,
-          name: attachment.name,
-          mimeType:
-            attachment.mimeType,
-          size: attachment.size,
-          createdAt:
-            attachment.createdAt,
+      const cleanFileName =
+        sanitizeFileName(input.name)
+
+      const storagePath = [
+        document.trip_id,
+        input.documentId,
+        `${attachmentId}-${cleanFileName}`,
+      ].join('/')
+
+      const mimeType =
+        input.mimeType ||
+        blob.type ||
+        'application/octet-stream'
+
+      const {
+        error: uploadError,
+      } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(
+          storagePath,
           blob,
-        }
+          {
+            contentType: mimeType,
+            upsert: false,
+          },
+        )
 
-      const database =
-        await databasePromise
-
-      await database.put(
-        STORE_NAME,
-        storedAttachment,
-      )
-
-      if (input.url.startsWith('blob:')) {
-        URL.revokeObjectURL(input.url)
+      if (uploadError) {
+        throw uploadError
       }
+
+      const createdAt =
+        new Date().toISOString()
+
+      const {
+        error: metadataError,
+      } = await supabase
+        .from('travel_attachments')
+        .insert({
+          id: attachmentId,
+          trip_id:
+            document.trip_id,
+          document_id:
+            input.documentId,
+          created_by: user.id,
+          name: input.name.trim(),
+          mime_type: mimeType,
+          file_size:
+            input.size || blob.size,
+          storage_path: storagePath,
+          created_at: createdAt,
+        })
+
+      if (metadataError) {
+        await supabase.storage
+          .from(BUCKET_NAME)
+          .remove([storagePath])
+
+        throw metadataError
+      }
+
+      const {
+        data: signedUrlData,
+        error: signedUrlError,
+      } = await supabase.storage
+        .from(BUCKET_NAME)
+        .createSignedUrl(
+          storagePath,
+          SIGNED_URL_DURATION,
+        )
+
+      if (signedUrlError) {
+        throw signedUrlError
+      }
+
+      const attachment: TravelAttachment = {
+        id: attachmentId,
+        documentId:
+          input.documentId,
+        name: input.name.trim(),
+        mimeType,
+        size:
+          input.size || blob.size,
+        url:
+          signedUrlData.signedUrl,
+        createdAt,
+      }
+
+      setAttachments(
+        (currentAttachments) => [
+          attachment,
+          ...currentAttachments,
+        ],
+      )
 
       setError(null)
 
-      notifyAttachmentsChanged(
-        input.documentId,
-      )
+      if (
+        input.url.startsWith('blob:')
+      ) {
+        URL.revokeObjectURL(
+          input.url,
+        )
+      }
 
       return attachment
     } catch (addError) {
       console.error(
-        'Errore durante il salvataggio dell’allegato:',
+        'Errore salvataggio allegato cloud:',
         addError,
       )
 
@@ -326,24 +379,65 @@ export function useAttachments(
     attachmentId: string,
   ): Promise<void> {
     try {
-      const database =
-        await databasePromise
+      const attachment =
+        attachments.find(
+          (item) =>
+            item.id === attachmentId,
+        )
 
-      await database.delete(
-        STORE_NAME,
-        attachmentId,
+      const {
+        data: metadata,
+        error: metadataError,
+      } = await supabase
+        .from('travel_attachments')
+        .select('storage_path')
+        .eq('id', attachmentId)
+        .single()
+
+      if (metadataError) {
+        throw metadataError
+      }
+
+      const {
+        error: storageError,
+      } = await supabase.storage
+        .from(BUCKET_NAME)
+        .remove([
+          metadata.storage_path,
+        ])
+
+      if (storageError) {
+        throw storageError
+      }
+
+      const {
+        error: deleteError,
+      } = await supabase
+        .from('travel_attachments')
+        .delete()
+        .eq('id', attachmentId)
+
+      if (deleteError) {
+        throw deleteError
+      }
+
+      setAttachments(
+        (currentAttachments) =>
+          currentAttachments.filter(
+            (item) =>
+              item.id !== attachmentId,
+          ),
       )
 
       setError(null)
 
-      if (documentId) {
-        notifyAttachmentsChanged(
-          documentId,
-        )
+      if (attachment?.url) {
+        // URL firmato remoto:
+        // non necessita revokeObjectURL.
       }
     } catch (deleteError) {
       console.error(
-        'Errore durante l’eliminazione dell’allegato:',
+        'Errore eliminazione allegato cloud:',
         deleteError,
       )
 
@@ -366,37 +460,59 @@ export function useAttachments(
     }
 
     try {
-      const database =
-        await databasePromise
+      const {
+        data,
+        error: metadataError,
+      } = await supabase
+        .from('travel_attachments')
+        .select(
+          'id, storage_path',
+        )
+        .eq('document_id', id)
 
-      const transaction =
-        database.transaction(
-          STORE_NAME,
-          'readwrite',
+      if (metadataError) {
+        throw metadataError
+      }
+
+      const storagePaths =
+        (data ?? []).map(
+          (item) =>
+            item.storage_path,
         )
 
-      const attachmentKeys =
-        await transaction.store.index(
-          'by-document-id',
-        ).getAllKeys(id)
+      if (
+        storagePaths.length > 0
+      ) {
+        const {
+          error: storageError,
+        } = await supabase.storage
+          .from(BUCKET_NAME)
+          .remove(storagePaths)
 
-      await Promise.all(
-        attachmentKeys.map(
-          (attachmentId) =>
-            transaction.store.delete(
-              attachmentId,
-            ),
-        ),
-      )
+        if (storageError) {
+          throw storageError
+        }
+      }
 
-      await transaction.done
+      const {
+        error: deleteError,
+      } = await supabase
+        .from('travel_attachments')
+        .delete()
+        .eq('document_id', id)
+
+      if (deleteError) {
+        throw deleteError
+      }
+
+      if (id === documentId) {
+        setAttachments([])
+      }
 
       setError(null)
-
-      notifyAttachmentsChanged(id)
     } catch (clearError) {
       console.error(
-        'Errore durante l’eliminazione degli allegati:',
+        'Errore eliminazione allegati cloud:',
         clearError,
       )
 
@@ -421,5 +537,7 @@ export function useAttachments(
     addAttachment,
     deleteAttachment,
     clearDocumentAttachments,
+    reloadAttachments:
+      loadAttachments,
   }
 }
