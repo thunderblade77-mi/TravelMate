@@ -18,13 +18,20 @@ const CATEGORY_COLORS: Record<
   ExpenseCategory,
   string
 > = {
-  food: '#f97316',
-  transport: '#3b82f6',
+  restaurant: '#f97316',
+  bar: '#fb7185',
+  groceries: '#84cc16',
+  taxi: '#facc15',
+  fuel: '#ef4444',
+  tolls: '#a855f7',
+  parking: '#6366f1',
   accommodation: '#8b5cf6',
   activities: '#ec4899',
   shopping: '#eab308',
+  transport: '#3b82f6',
   health: '#14b8a6',
   other: '#64748b',
+  food: '#f97316',
 }
 
 const CHART_RADIUS = 46
