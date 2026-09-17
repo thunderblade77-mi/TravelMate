@@ -35,11 +35,14 @@ type CloudExpenseRow = {
   trip_id: string
   created_by: string
   title: string
+  merchant: string | null
   amount: number | string
   category: ExpenseCategory
   expense_date: string
   paid_by: string
   payment_method: Expense['paymentMethod']
+  split_kind: Expense['splitKind'] | null
+  split_with: unknown
   notes: string
   created_at: string
   updated_at: string
@@ -58,6 +61,17 @@ function createId(): string {
     .slice(2)}`
 }
 
+function normalizeSplitWith(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function mapCloudExpense(
   row: CloudExpenseRow,
 ): Expense {
@@ -65,6 +79,7 @@ function mapCloudExpense(
     id: row.id,
     tripId: row.trip_id,
     title: row.title,
+    merchant: row.merchant ?? '',
     amount: Math.max(
       0,
       Number(row.amount) || 0,
@@ -73,6 +88,8 @@ function mapCloudExpense(
     date: row.expense_date,
     paidBy: row.paid_by,
     paymentMethod: row.payment_method,
+    splitKind: row.split_kind ?? 'none',
+    splitWith: normalizeSplitWith(row.split_with),
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -138,11 +155,14 @@ export function useExpenses(
               trip_id,
               created_by,
               title,
+              merchant,
               amount,
               category,
               expense_date,
               payment_method,
               paid_by,
+              split_kind,
+              split_with,
               notes,
               created_at,
               updated_at
@@ -252,7 +272,11 @@ export function useExpenses(
         id: createId(),
         amount: Math.max(0, input.amount),
         title: input.title.trim(),
+        merchant: input.merchant.trim(),
         paidBy: input.paidBy.trim(),
+        splitWith: input.splitWith
+          .map((item) => item.trim())
+          .filter(Boolean),
         notes: input.notes.trim(),
         createdAt: now,
         updatedAt: now,
@@ -270,11 +294,14 @@ export function useExpenses(
           trip_id: newExpense.tripId,
           created_by: userId,
           title: newExpense.title,
+          merchant: newExpense.merchant,
           amount: newExpense.amount,
           category: newExpense.category,
           expense_date: newExpense.date,
           payment_method: newExpense.paymentMethod,
           paid_by: newExpense.paidBy,
+          split_kind: newExpense.splitKind,
+          split_with: newExpense.splitWith,
           notes: newExpense.notes,
           created_at: newExpense.createdAt,
           updated_at: newExpense.updatedAt,
@@ -329,6 +356,10 @@ export function useExpenses(
           updates.title !== undefined
             ? updates.title.trim()
             : currentExpense.title,
+        merchant:
+          updates.merchant !== undefined
+            ? updates.merchant.trim()
+            : currentExpense.merchant,
         amount:
           updates.amount !== undefined
             ? Math.max(0, updates.amount)
@@ -337,6 +368,12 @@ export function useExpenses(
           updates.paidBy !== undefined
             ? updates.paidBy.trim()
             : currentExpense.paidBy,
+        splitWith:
+          updates.splitWith !== undefined
+            ? updates.splitWith
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : currentExpense.splitWith,
         notes:
           updates.notes !== undefined
             ? updates.notes.trim()
@@ -356,10 +393,14 @@ export function useExpenses(
         .from('expenses')
         .update({
           title: updatedExpense.title,
+          merchant: updatedExpense.merchant,
           amount: updatedExpense.amount,
           category: updatedExpense.category,
           expense_date: updatedExpense.date,
+          payment_method: updatedExpense.paymentMethod,
           paid_by: updatedExpense.paidBy,
+          split_kind: updatedExpense.splitKind,
+          split_with: updatedExpense.splitWith,
           notes: updatedExpense.notes,
           updated_at:
             updatedExpense.updatedAt,
@@ -600,6 +641,70 @@ export function useExpenses(
       )
   }, [sortedExpenses])
 
+  const merchantTotals = useMemo(() => {
+    const totals = new Map<string, number>()
+
+    sortedExpenses.forEach((expense) => {
+      const merchant = expense.merchant.trim()
+
+      if (!merchant) {
+        return
+      }
+
+      totals.set(
+        merchant,
+        (totals.get(merchant) ?? 0) + expense.amount,
+      )
+    })
+
+    return Array.from(totals.entries())
+      .map(([merchant, total]) => ({ merchant, total }))
+      .sort((a, b) => b.total - a.total)
+  }, [sortedExpenses])
+
+  const settlementTotals = useMemo(() => {
+    const balances = new Map<string, number>()
+
+    sortedExpenses.forEach((expense) => {
+      const members = Array.from(
+        new Set(expense.splitWith.map((item) => item.trim()).filter(Boolean)),
+      )
+
+      if (
+        expense.splitKind === 'none' ||
+        members.length === 0
+      ) {
+        return
+      }
+
+      const share = expense.amount / members.length
+
+      members.forEach((member) => {
+        balances.set(
+          member,
+          (balances.get(member) ?? 0) - share,
+        )
+      })
+
+      const payer = expense.paidBy.trim()
+
+      if (payer) {
+        balances.set(
+          payer,
+          (balances.get(payer) ?? 0) + expense.amount,
+        )
+      }
+    })
+
+    return Array.from(balances.entries())
+      .map(([name, balance]) => ({
+        name,
+        balance: Math.round(balance * 100) / 100,
+      }))
+      .filter((item) => Math.abs(item.balance) >= 0.01)
+      .sort((a, b) => b.balance - a.balance)
+  }, [sortedExpenses])
+
   return {
     expenses: sortedExpenses,
     expenseCount:
@@ -609,6 +714,8 @@ export function useExpenses(
     budgetUsedPercentage,
     categoryTotals,
     paidByTotals,
+    merchantTotals,
+    settlementTotals,
     loading,
     error,
     addExpense,
