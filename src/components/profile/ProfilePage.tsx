@@ -8,18 +8,86 @@ import {
   exportTravelMateBackup,
   importTravelMateBackup,
 } from '../../services/backupService'
+import {
+  loadTravelPreferences,
+  saveTravelPreferences,
+} from '../../services/travelIntelligenceStorage'
 
 import type { Trip } from '../../types/travel'
+import type {
+  TravelInterest,
+  TravelPace,
+} from '../../types/travelIntelligence'
 
 type ProfilePageProps = {
   trips: Trip[]
 }
+
+const interestOptions: {
+  value: TravelInterest
+  label: string
+  icon: string
+}[] = [
+  { value: 'arte', label: 'Arte', icon: '🎨' },
+  { value: 'monumenti', label: 'Monumenti', icon: '🏛️' },
+  { value: 'storia', label: 'Storia', icon: '📜' },
+  { value: 'cibo', label: 'Cibo', icon: '🍽️' },
+  { value: 'nightlife', label: 'Nightlife', icon: '🌙' },
+  { value: 'natura', label: 'Natura', icon: '🌿' },
+  { value: 'mare', label: 'Mare', icon: '🏖️' },
+  { value: 'shopping', label: 'Shopping', icon: '🛍️' },
+  { value: 'famiglia', label: 'Famiglia', icon: '👨‍👩‍👧' },
+  { value: 'avventura', label: 'Avventura', icon: '🧗' },
+  { value: 'relax', label: 'Relax', icon: '🧘' },
+  { value: 'fotografia', label: 'Fotografia', icon: '📷' },
+]
+
+const paceOptions: {
+  value: TravelPace
+  label: string
+  description: string
+}[] = [
+  {
+    value: 'slow',
+    label: 'Relax',
+    description: 'Poche tappe e più tempo in ogni posto.',
+  },
+  {
+    value: 'balanced',
+    label: 'Equilibrato',
+    description: 'Un buon mix tra visite e tempo libero.',
+  },
+  {
+    value: 'intense',
+    label: 'Intenso',
+    description: 'Voglio vedere il più possibile.',
+  },
+]
 
 export default function ProfilePage({
   trips,
 }: ProfilePageProps) {
   const fileInputRef =
     useRef<HTMLInputElement | null>(null)
+
+  const initialPreferences = loadTravelPreferences()
+
+  const [interests, setInterests] = useState<TravelInterest[]>(
+    initialPreferences.interests,
+  )
+  const [pace, setPace] = useState<TravelPace>(
+    initialPreferences.pace,
+  )
+  const [avoidCrowds, setAvoidCrowds] = useState(
+    initialPreferences.avoidCrowds,
+  )
+  const [localFood, setLocalFood] = useState(
+    initialPreferences.localFood,
+  )
+  const [hiddenGems, setHiddenGems] = useState(
+    initialPreferences.hiddenGems,
+  )
+  const [preferencesSaved, setPreferencesSaved] = useState(false)
 
   const [
     backupMessage,
@@ -52,6 +120,26 @@ export default function ProfilePage({
       currency: 'EUR',
       maximumFractionDigits: 0,
     }).format(value)
+
+  function toggleInterest(interest: TravelInterest) {
+    setPreferencesSaved(false)
+    setInterests((current) =>
+      current.includes(interest)
+        ? current.filter((item) => item !== interest)
+        : [...current, interest],
+    )
+  }
+
+  function handleSavePreferences() {
+    saveTravelPreferences({
+      interests,
+      pace,
+      avoidCrowds,
+      localFood,
+      hiddenGems,
+    })
+    setPreferencesSaved(true)
+  }
 
   function handleExportBackup() {
     setBackupError(null)
@@ -138,7 +226,7 @@ export default function ProfilePage({
         </h2>
 
         <p className="mt-1 text-slate-500">
-          Benvenuto in TravelG
+          Le tue preferenze guideranno TravelG AI durante il viaggio.
         </p>
       </div>
 
@@ -172,6 +260,111 @@ export default function ProfilePage({
             {formatCurrency(totalBudget)}
           </h3>
         </div>
+      </div>
+
+      <div className="mt-6 rounded-3xl border border-violet-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-2xl">
+            ✨
+          </div>
+          <div>
+            <h3 className="text-lg font-bold">Il tuo stile di viaggio</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Scegli ciò che ti interessa: questi dati serviranno all’assistente AI per proporti luoghi, esperienze e cibo davvero coerenti con te.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {interestOptions.map((option) => {
+            const selected = interests.includes(option.value)
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleInterest(option.value)}
+                className={`rounded-2xl border px-2 py-3 text-center text-xs font-semibold transition active:scale-95 ${
+                  selected
+                    ? 'border-violet-600 bg-violet-600 text-white'
+                    : 'border-slate-200 bg-slate-50 text-slate-700'
+                }`}
+              >
+                <span className="block text-xl">{option.icon}</span>
+                <span className="mt-1 block">{option.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-5">
+          <p className="text-sm font-semibold text-slate-800">Ritmo preferito</p>
+          <div className="mt-2 space-y-2">
+            {paceOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  setPace(option.value)
+                  setPreferencesSaved(false)
+                }}
+                className={`w-full rounded-2xl border p-3 text-left transition ${
+                  pace === option.value
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-slate-200 bg-white'
+                }`}
+              >
+                <strong className="text-sm">{option.label}</strong>
+                <span className="mt-1 block text-xs text-slate-500">
+                  {option.description}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {[
+            {
+              label: 'Preferisco evitare la folla',
+              value: avoidCrowds,
+              setValue: setAvoidCrowds,
+            },
+            {
+              label: 'Voglio provare cucina locale',
+              value: localFood,
+              setValue: setLocalFood,
+            },
+            {
+              label: 'Mi interessano posti meno turistici',
+              value: hiddenGems,
+              setValue: setHiddenGems,
+            },
+          ].map((item) => (
+            <label
+              key={item.label}
+              className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3"
+            >
+              <span className="text-sm font-medium text-slate-700">{item.label}</span>
+              <input
+                type="checkbox"
+                checked={item.value}
+                onChange={(event) => {
+                  item.setValue(event.target.checked)
+                  setPreferencesSaved(false)
+                }}
+                className="h-5 w-5 accent-blue-600"
+              />
+            </label>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSavePreferences}
+          className="mt-5 w-full rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white active:scale-[0.99]"
+        >
+          {preferencesSaved ? '✓ Preferenze salvate' : 'Salva preferenze'}
+        </button>
       </div>
 
       <div className="mt-6 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
@@ -237,16 +430,15 @@ export default function ProfilePage({
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
         <h3 className="font-semibold">
-          Funzioni in arrivo
+          TravelG 2.0
         </h3>
 
         <ul className="mt-4 space-y-3 text-sm text-slate-600">
-          <li>☁️ Sincronizzazione cloud</li>
-          <li>🤖 TravelG AI</li>
-          <li>📄 Wallet documenti</li>
-          <li>🗺️ Mappe offline</li>
-          <li>📍 Posizione in tempo reale</li>
-          <li>👨‍👩‍👧 Condivisione viaggio</li>
+          <li>📍 Check automatico delle visite tramite posizione</li>
+          <li>🤖 Suggerimenti AI basati su gusti e contesto</li>
+          <li>👥 Organizzazione collaborativa del viaggio</li>
+          <li>⭐ Valutazioni condivise dei luoghi</li>
+          <li>📸 Memory story con foto preferite e geolocalizzate</li>
         </ul>
       </div>
     </section>
