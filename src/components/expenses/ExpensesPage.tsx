@@ -5,6 +5,7 @@ import { useExpenses } from '../../hooks/useExpenses'
 import type {
   Expense,
   ExpenseCategory,
+  ExpenseSplitKind,
 } from '../../types/expense'
 import type { Trip } from '../../types/travel'
 
@@ -22,11 +23,14 @@ type ExpensesPageProps = {
 
 type ExpenseFormValues = {
   title: string
+  merchant: string
   amount: number
   category: Expense['category']
   date: string
   paidBy: string
   paymentMethod: Expense['paymentMethod']
+  splitKind: ExpenseSplitKind
+  splitWith: string[]
   notes: string
 }
 
@@ -54,6 +58,8 @@ export default function ExpensesPage({
     remainingBudget,
     budgetUsedPercentage,
     categoryTotals,
+    merchantTotals,
+    settlementTotals,
     addExpense,
     updateExpense,
     deleteExpense,
@@ -75,6 +81,9 @@ export default function ExpensesPage({
       const matchesSearch =
         normalizedSearch.length === 0 ||
         expense.title
+          .toLowerCase()
+          .includes(normalizedSearch) ||
+        expense.merchant
           .toLowerCase()
           .includes(normalizedSearch) ||
         expense.notes
@@ -188,7 +197,7 @@ export default function ExpensesPage({
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Tieni sotto controllo il budget del viaggio.
+            Budget, categorie, luoghi e divisione tra partecipanti o famiglie.
           </p>
         </div>
 
@@ -219,6 +228,72 @@ export default function ExpensesPage({
             categories={categoryTotals}
             formatCurrency={formatCurrency}
           />
+        </div>
+      )}
+
+      {(merchantTotals.length > 0 || settlementTotals.length > 0) && (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {merchantTotals.length > 0 && (
+            <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-medium text-emerald-600">
+                Dove sono stati spesi
+              </p>
+              <h2 className="mt-1 text-xl font-bold">
+                Luoghi ed esercenti
+              </h2>
+              <div className="mt-4 space-y-3">
+                {merchantTotals.slice(0, 8).map((item) => (
+                  <div
+                    key={item.merchant}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0 truncate text-sm text-slate-700">
+                      📍 {item.merchant}
+                    </span>
+                    <strong className="shrink-0 text-sm">
+                      {formatCurrency(item.total)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {settlementTotals.length > 0 && (
+            <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-medium text-blue-600">
+                Divisione spese
+              </p>
+              <h2 className="mt-1 text-xl font-bold">
+                Saldo partecipanti / famiglie
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Positivo = deve ricevere. Negativo = deve versare.
+              </p>
+              <div className="mt-4 space-y-3">
+                {settlementTotals.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0 truncate text-sm text-slate-700">
+                      👤 {item.name}
+                    </span>
+                    <strong
+                      className={`shrink-0 text-sm ${
+                        item.balance >= 0
+                          ? 'text-emerald-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
+                      {item.balance >= 0 ? '+' : ''}
+                      {formatCurrency(item.balance)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )}
         </div>
       )}
 
@@ -267,8 +342,7 @@ export default function ExpensesPage({
             </h3>
 
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              Registra hotel, pasti, trasporti e tutte le
-              altre spese del viaggio.
+              Registra ristoranti, spesa, taxi, hotel, attività e tutte le altre spese del viaggio.
             </p>
 
             <button
