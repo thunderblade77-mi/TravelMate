@@ -10,6 +10,8 @@ type ActivityFormModalProps = {
   isOpen: boolean
   isEditing: boolean
   selectedDay: RoadbookDay | null
+  days: RoadbookDay[]
+  selectedDayId: string | null
 
   time: string
   title: string
@@ -18,6 +20,7 @@ type ActivityFormModalProps = {
   category: ActivityCategory
   transportType: TransportType
 
+  onDayChange: (value: string) => void
   onTimeChange: (value: string) => void
   onTitleChange: (value: string) => void
   onLocationChange: (value: string) => void
@@ -117,16 +120,29 @@ const transportOptions: {
   },
 ]
 
+function formatDayLabel(day: RoadbookDay): string {
+  const date = new Intl.DateTimeFormat('it-IT', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${day.date}T12:00:00`))
+
+  return `${day.label} · ${date}`
+}
+
 export default function ActivityFormModal({
   isOpen,
   isEditing,
   selectedDay,
+  days,
+  selectedDayId,
   time,
   title,
   location,
   notes,
   category,
   transportType,
+  onDayChange,
   onTimeChange,
   onTitleChange,
   onLocationChange,
@@ -166,7 +182,7 @@ export default function ActivityFormModal({
 
             <p className="mt-1 text-sm text-slate-500">
               {isEditing
-                ? 'Aggiorna i dettagli dell’attività.'
+                ? 'Aggiorna i dettagli o sposta l’attività in un altro giorno.'
                 : 'Aggiungi una nuova tappa alla giornata.'}
             </p>
           </div>
@@ -185,6 +201,26 @@ export default function ActivityFormModal({
           onSubmit={onSubmit}
           className="mt-6 max-h-[65vh] space-y-4 overflow-y-auto pr-1"
         >
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold">
+              Giorno
+            </span>
+
+            <select
+              value={selectedDayId ?? ''}
+              onChange={(event) =>
+                onDayChange(event.target.value)
+              }
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            >
+              {days.map((day) => (
+                <option key={day.id} value={day.id}>
+                  {formatDayLabel(day)}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
             <label className="block">
               <span className="mb-2 block text-sm font-semibold">
