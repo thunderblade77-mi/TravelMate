@@ -194,7 +194,7 @@ export default function HomePage({
   const documentAlerts = expiredDocumentCount + expiringDocumentCount
 
   const weatherSummary = weather
-    ? `${Math.round(weather.temperature)}° · ${weather.description}`
+    ? `${Math.round(weather.current.temperature)}°`
     : 'Meteo in aggiornamento'
 
   return (
@@ -311,7 +311,7 @@ export default function HomePage({
           className="rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm active:scale-[0.99]"
         >
           <span className="text-sm font-bold">🌦️ Meteo</span>
-          <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-500">
             {hasCoordinates ? weatherSummary : 'Aggiungi la posizione del viaggio'}
           </p>
         </button>
