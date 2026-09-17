@@ -5,6 +5,7 @@ import { useDocuments } from '../../hooks/useDocuments'
 import { useExpenses } from '../../hooks/useExpenses'
 import { useWeather } from '../../hooks/useWeather'
 import type { Trip } from '../../types/travel'
+import AutoVisitDetector from './AutoVisitDetector'
 
 type HomePageProps = {
   activeTrip: Trip | null
@@ -276,11 +277,13 @@ export default function HomePage({
         <QuickAction
           icon="👥"
           label="Gruppo"
-          detail="Viaggiatori"
+          detail="Chat e sondaggi"
           onClick={() => navigate('/trips')}
           badge={String(activeTrip.travelers)}
         />
       </div>
+
+      <AutoVisitDetector trip={activeTrip} />
 
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <button
