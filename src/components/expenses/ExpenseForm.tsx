@@ -4,15 +4,19 @@ import {
   EXPENSE_CATEGORY_OPTIONS,
   EXPENSE_PAYMENT_METHOD_OPTIONS,
   type Expense,
+  type ExpenseSplitKind,
 } from '../../types/expense'
 
 type ExpenseFormValues = {
   title: string
+  merchant: string
   amount: string
   category: Expense['category']
   date: string
   paidBy: string
   paymentMethod: Expense['paymentMethod']
+  splitKind: ExpenseSplitKind
+  splitWith: string
   notes: string
 }
 
@@ -20,18 +24,25 @@ type ExpenseFormProps = {
   initialExpense?: Expense | null
   onSubmit: (values: {
     title: string
+    merchant: string
     amount: number
     category: Expense['category']
     date: string
     paidBy: string
     paymentMethod: Expense['paymentMethod']
+    splitKind: ExpenseSplitKind
+    splitWith: string[]
     notes: string
   }) => void
   onCancel: () => void
 }
 
 function today() {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export default function ExpenseForm({
@@ -42,11 +53,14 @@ export default function ExpenseForm({
   const [values, setValues] =
     useState<ExpenseFormValues>({
       title: '',
+      merchant: '',
       amount: '',
-      category: 'food',
+      category: 'restaurant',
       date: today(),
       paidBy: '',
       paymentMethod: 'card',
+      splitKind: 'none',
+      splitWith: '',
       notes: '',
     })
 
@@ -57,12 +71,15 @@ export default function ExpenseForm({
 
     setValues({
       title: initialExpense.title,
+      merchant: initialExpense.merchant,
       amount: String(initialExpense.amount),
       category: initialExpense.category,
       date: initialExpense.date,
       paidBy: initialExpense.paidBy,
       paymentMethod:
         initialExpense.paymentMethod,
+      splitKind: initialExpense.splitKind,
+      splitWith: initialExpense.splitWith.join(', '),
       notes: initialExpense.notes,
     })
   }, [initialExpense])
@@ -91,14 +108,24 @@ export default function ExpenseForm({
       return
     }
 
+    const splitWith = values.splitKind === 'none'
+      ? []
+      : values.splitWith
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+
     onSubmit({
       title: values.title.trim(),
+      merchant: values.merchant.trim(),
       amount,
       category: values.category,
       date: values.date,
       paidBy: values.paidBy.trim(),
       paymentMethod:
         values.paymentMethod,
+      splitKind: values.splitKind,
+      splitWith,
       notes: values.notes.trim(),
     })
   }
@@ -122,8 +149,30 @@ export default function ExpenseForm({
             )
           }
           className="w-full rounded-xl border border-slate-300 p-3"
-          placeholder="Es. Cena al ristorante"
+          placeholder="Es. Cena di pesce"
         />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium">
+          Dove hai speso
+        </label>
+
+        <input
+          value={values.merchant}
+          onChange={(e) =>
+            updateField(
+              'merchant',
+              e.target.value,
+            )
+          }
+          className="w-full rounded-xl border border-slate-300 p-3"
+          placeholder="Es. Restaurante O Pescador, Lisbona"
+        />
+
+        <p className="mt-1 text-xs text-slate-500">
+          Serve per il riepilogo finale dei luoghi dove sono stati spesi i soldi.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -208,37 +257,88 @@ export default function ExpenseForm({
             )
           }
           className="w-full rounded-xl border border-slate-300 p-3"
-          placeholder="Mario"
+          placeholder="Es. Stefano / Famiglia Rossi"
         />
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium">
-          Metodo di pagamento
-        </label>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Divisione
+          </label>
 
-        <select
-          value={values.paymentMethod}
-          onChange={(e) =>
-            updateField(
-              'paymentMethod',
-              e.target.value as Expense['paymentMethod'],
-            )
-          }
-          className="w-full rounded-xl border border-slate-300 p-3"
-        >
-          {EXPENSE_PAYMENT_METHOD_OPTIONS.map(
-            (method) => (
-              <option
-                key={method.value}
-                value={method.value}
-              >
-                {method.label}
-              </option>
-            ),
-          )}
-        </select>
+          <select
+            value={values.splitKind}
+            onChange={(e) =>
+              updateField(
+                'splitKind',
+                e.target.value as ExpenseSplitKind,
+              )
+            }
+            className="w-full rounded-xl border border-slate-300 p-3"
+          >
+            <option value="none">Non dividere</option>
+            <option value="participants">Per partecipanti</option>
+            <option value="families">Per famiglie</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Metodo
+          </label>
+
+          <select
+            value={values.paymentMethod}
+            onChange={(e) =>
+              updateField(
+                'paymentMethod',
+                e.target.value as Expense['paymentMethod'],
+              )
+            }
+            className="w-full rounded-xl border border-slate-300 p-3"
+          >
+            {EXPENSE_PAYMENT_METHOD_OPTIONS.map(
+              (method) => (
+                <option
+                  key={method.value}
+                  value={method.value}
+                >
+                  {method.label}
+                </option>
+              ),
+            )}
+          </select>
+        </div>
       </div>
+
+      {values.splitKind !== 'none' && (
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Dividi tra
+          </label>
+
+          <input
+            value={values.splitWith}
+            onChange={(e) =>
+              updateField(
+                'splitWith',
+                e.target.value,
+              )
+            }
+            className="w-full rounded-xl border border-slate-300 p-3"
+            placeholder={
+              values.splitKind === 'families'
+                ? 'Famiglia Rossi, Famiglia Bianchi'
+                : 'Stefano, Alessandro, Anna, Sara'
+            }
+          />
+
+          <p className="mt-1 text-xs text-slate-500">
+            Separa i nomi con una virgola. Per ora la quota viene divisa in parti uguali.
+          </p>
+        </div>
+      )}
 
       <div>
         <label className="mb-1 block text-sm font-medium">
