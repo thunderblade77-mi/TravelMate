@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import TripGroupPanel from './TripGroupPanel'
+import TripMemoriesPanel from './TripMemoriesPanel'
 import type { Trip } from '../../types/travel'
 
 type TripsPageProps = {
@@ -187,6 +188,8 @@ export default function TripsPage({
       {activeTrip && showGroup && (
         <TripGroupPanel trip={activeTrip} onShareTrip={onShareTrip} />
       )}
+
+      {activeTrip && <TripMemoriesPanel trip={activeTrip} />}
     </section>
   )
 }
