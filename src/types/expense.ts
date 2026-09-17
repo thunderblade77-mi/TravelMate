@@ -1,11 +1,18 @@
 export type ExpenseCategory =
-  | 'food'
-  | 'transport'
+  | 'restaurant'
+  | 'bar'
+  | 'groceries'
+  | 'taxi'
+  | 'fuel'
+  | 'tolls'
+  | 'parking'
   | 'accommodation'
   | 'activities'
   | 'shopping'
+  | 'transport'
   | 'health'
   | 'other'
+  | 'food'
 
 export type ExpensePaymentMethod =
   | 'cash'
@@ -13,15 +20,23 @@ export type ExpensePaymentMethod =
   | 'bank-transfer'
   | 'other'
 
+export type ExpenseSplitKind =
+  | 'none'
+  | 'participants'
+  | 'families'
+
 export type Expense = {
   id: string
   tripId: string
   title: string
+  merchant: string
   amount: number
   category: ExpenseCategory
   date: string
   paidBy: string
   paymentMethod: ExpensePaymentMethod
+  splitKind: ExpenseSplitKind
+  splitWith: string[]
   notes: string
   createdAt: string
   updatedAt: string
@@ -40,23 +55,48 @@ export type ExpensePaymentMethodOption = {
 
 export const EXPENSE_CATEGORY_OPTIONS: ExpenseCategoryOption[] = [
   {
-    value: 'food',
-    label: 'Cibo',
-    icon: '🍝',
+    value: 'restaurant',
+    label: 'Ristorante',
+    icon: '🍽️',
   },
   {
-    value: 'transport',
-    label: 'Trasporti',
-    icon: '🚆',
+    value: 'bar',
+    label: 'Bar / Caffè',
+    icon: '☕',
+  },
+  {
+    value: 'groceries',
+    label: 'Spesa supermercato',
+    icon: '🛒',
+  },
+  {
+    value: 'taxi',
+    label: 'Taxi / Ride sharing',
+    icon: '🚕',
+  },
+  {
+    value: 'fuel',
+    label: 'Carburante',
+    icon: '⛽',
+  },
+  {
+    value: 'tolls',
+    label: 'Pedaggi',
+    icon: '🛣️',
+  },
+  {
+    value: 'parking',
+    label: 'Parcheggi',
+    icon: '🅿️',
   },
   {
     value: 'accommodation',
-    label: 'Alloggio',
+    label: 'Hotel / Alloggio',
     icon: '🏨',
   },
   {
     value: 'activities',
-    label: 'Attività',
+    label: 'Attività / Ingressi',
     icon: '🎟️',
   },
   {
@@ -65,8 +105,13 @@ export const EXPENSE_CATEGORY_OPTIONS: ExpenseCategoryOption[] = [
     icon: '🛍️',
   },
   {
+    value: 'transport',
+    label: 'Trasporti',
+    icon: '🚆',
+  },
+  {
     value: 'health',
-    label: 'Salute',
+    label: 'Farmacia / Salute',
     icon: '💊',
   },
   {
