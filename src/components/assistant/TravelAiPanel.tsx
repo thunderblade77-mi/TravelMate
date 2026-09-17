@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import {
-  loadTravelPreferences,
-} from '../../services/travelIntelligenceStorage'
+import { loadTravelPreferences } from '../../services/travelIntelligenceStorage'
+import { loadSyncedTravelPreferences } from '../../services/travelPreferencesCloud'
 
 import type { Trip } from '../../types/travel'
 
@@ -31,10 +30,28 @@ const typeIcons: Record<Recommendation['type'], string> = {
 }
 
 export default function TravelAiPanel({ activeTrip }: Props) {
-  const preferences = useMemo(
-    () => loadTravelPreferences(),
-    [],
+  const [preferences, setPreferences] = useState(() =>
+    loadTravelPreferences(),
   )
+  const [preferencesSynced, setPreferencesSynced] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    void loadSyncedTravelPreferences()
+      .then((synced) => {
+        if (!active) return
+        setPreferences(synced)
+        setPreferencesSynced(true)
+      })
+      .catch(() => {
+        if (active) setPreferencesSynced(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const [query, setQuery] = useState(
     'Cosa mi consigli di fare adesso?',
@@ -144,9 +161,16 @@ export default function TravelAiPanel({ activeTrip }: Props) {
     <article className="rounded-3xl bg-gradient-to-br from-indigo-950 via-blue-900 to-blue-700 p-5 text-white shadow-xl shadow-blue-200">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-200">
-            TravelG AI
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-200">
+              TravelG AI
+            </p>
+            {preferencesSynced && (
+              <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-100">
+                Cloud sync
+              </span>
+            )}
+          </div>
           <h2 className="mt-1 text-2xl font-bold">
             Il tuo assistente a {activeTrip.destination}
           </h2>
