@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -12,6 +13,10 @@ import {
   loadTravelPreferences,
   saveTravelPreferences,
 } from '../../services/travelIntelligenceStorage'
+import {
+  loadSyncedTravelPreferences,
+  saveCloudTravelPreferences,
+} from '../../services/travelPreferencesCloud'
 
 import type { Trip } from '../../types/travel'
 import type {
@@ -88,6 +93,36 @@ export default function ProfilePage({
     initialPreferences.hiddenGems,
   )
   const [preferencesSaved, setPreferencesSaved] = useState(false)
+  const [preferencesSyncing, setPreferencesSyncing] = useState(false)
+  const [preferencesSyncError, setPreferencesSyncError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    setPreferencesSyncing(true)
+
+    void loadSyncedTravelPreferences()
+      .then((synced) => {
+        if (!active) return
+        setInterests(synced.interests)
+        setPace(synced.pace)
+        setAvoidCrowds(synced.avoidCrowds)
+        setLocalFood(synced.localFood)
+        setHiddenGems(synced.hiddenGems)
+        setPreferencesSyncError(null)
+      })
+      .catch(() => {
+        if (active) {
+          setPreferencesSyncError('Cloud non disponibile: sto usando le preferenze salvate sul dispositivo.')
+        }
+      })
+      .finally(() => {
+        if (active) setPreferencesSyncing(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const [
     backupMessage,
@@ -130,15 +165,30 @@ export default function ProfilePage({
     )
   }
 
-  function handleSavePreferences() {
-    saveTravelPreferences({
+  async function handleSavePreferences() {
+    setPreferencesSyncing(true)
+    setPreferencesSyncError(null)
+
+    const values = {
       interests,
       pace,
       avoidCrowds,
       localFood,
       hiddenGems,
-    })
-    setPreferencesSaved(true)
+    }
+
+    try {
+      await saveCloudTravelPreferences(values)
+      setPreferencesSaved(true)
+    } catch {
+      saveTravelPreferences(values)
+      setPreferencesSaved(true)
+      setPreferencesSyncError(
+        'Preferenze salvate sul dispositivo. La sincronizzazione cloud verrà riprovata più avanti.',
+      )
+    } finally {
+      setPreferencesSyncing(false)
+    }
   }
 
   function handleExportBackup() {
@@ -360,11 +410,28 @@ export default function ProfilePage({
 
         <button
           type="button"
-          onClick={handleSavePreferences}
-          className="mt-5 w-full rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white active:scale-[0.99]"
+          onClick={() => void handleSavePreferences()}
+          disabled={preferencesSyncing}
+          className="mt-5 w-full rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
         >
-          {preferencesSaved ? '✓ Preferenze salvate' : 'Salva preferenze'}
+          {preferencesSyncing
+            ? 'Sincronizzazione…'
+            : preferencesSaved
+              ? '✓ Preferenze sincronizzate'
+              : 'Salva e sincronizza preferenze'}
         </button>
+
+        {preferencesSyncError && (
+          <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium leading-5 text-amber-700">
+            {preferencesSyncError}
+          </p>
+        )}
+
+        {!preferencesSyncError && !preferencesSyncing && (
+          <p className="mt-3 text-center text-xs font-semibold text-emerald-600">
+            Cloud sync attivo tra i tuoi dispositivi
+          </p>
+        )}
       </div>
 
       <div className="mt-6 rounded-3xl border border-blue-200 bg-white p-5 shadow-sm">
