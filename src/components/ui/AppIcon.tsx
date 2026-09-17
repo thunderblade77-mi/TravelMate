@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 type IconName =
   | 'home'
   | 'trips'
@@ -21,7 +23,7 @@ type AppIconProps = {
   strokeWidth?: number
 }
 
-const paths: Record<IconName, JSX.Element> = {
+const paths: Record<IconName, ReactNode> = {
   home: <><path d="M3 10.8 12 3l9 7.8"/><path d="M5.5 9.8V21h13V9.8"/><path d="M9.5 21v-6h5v6"/></>,
   trips: <><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M9 6V4.8A1.8 1.8 0 0 1 10.8 3h2.4A1.8 1.8 0 0 1 15 4.8V6"/><path d="M4 12h16"/><path d="M9 10v4M15 10v4"/></>,
   map: <><path d="m3.5 6.5 5-2 7 2 5-2v13l-5 2-7-2-5 2z"/><path d="M8.5 4.5v13M15.5 6.5v13"/></>,
