@@ -2,94 +2,16 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useRoadbook } from '../../hooks/useRoadbook'
-
 import {
   parseItineraryMarkdown,
   type ParsedItineraryDay,
 } from '../../services/itineraryParser'
-
 import type { Trip } from '../../types/travel'
+
+import TravelAiPanel from './TravelAiPanel'
 
 type AssistantPageProps = {
   activeTrip: Trip | null
-}
-
-function getCategoryIcon(
-  category:
-    | 'visita'
-    | 'ristorante'
-    | 'hotel'
-    | 'trasporto'
-    | 'altro',
-  title: string,
-): string {
-  const normalizedTitle = title.toLowerCase()
-
-  if (category === 'ristorante') {
-    return '🍽️'
-  }
-
-  if (category === 'hotel') {
-    return '🏨'
-  }
-
-  if (category === 'trasporto') {
-    if (
-      normalizedTitle.includes('volo') ||
-      normalizedTitle.includes('aereo') ||
-      normalizedTitle.includes('aeroporto')
-    ) {
-      return '✈️'
-    }
-
-    if (
-      normalizedTitle.includes('treno') ||
-      normalizedTitle.includes('ferrovia')
-    ) {
-      return '🚆'
-    }
-
-    if (
-      normalizedTitle.includes('metro') ||
-      normalizedTitle.includes('metropolitana')
-    ) {
-      return '🚇'
-    }
-
-    if (
-      normalizedTitle.includes('autobus') ||
-      normalizedTitle.includes('bus') ||
-      normalizedTitle.includes('pullman')
-    ) {
-      return '🚌'
-    }
-
-    if (
-      normalizedTitle.includes('traghetto') ||
-      normalizedTitle.includes('nave')
-    ) {
-      return '⛴️'
-    }
-
-    if (normalizedTitle.includes('taxi')) {
-      return '🚕'
-    }
-
-    if (
-      normalizedTitle.includes('piedi') ||
-      normalizedTitle.includes('passeggiata')
-    ) {
-      return '🚶'
-    }
-
-    return '🚗'
-  }
-
-  if (category === 'altro') {
-    return '✨'
-  }
-
-  return '📍'
 }
 
 function formatPreviewDate(date: string): string {
@@ -112,14 +34,11 @@ export default function AssistantPage({
 
   const [itineraryText, setItineraryText] =
     useState('')
-
   const [parsedDays, setParsedDays] = useState<
     ParsedItineraryDay[]
   >([])
-
   const [analysisError, setAnalysisError] =
     useState<string | null>(null)
-
   const [importMessage, setImportMessage] =
     useState<string | null>(null)
 
@@ -128,13 +47,6 @@ export default function AssistantPage({
       total + day.activities.length,
     0,
   )
-
-  function handleTextChange(value: string) {
-    setItineraryText(value)
-    setParsedDays([])
-    setAnalysisError(null)
-    setImportMessage(null)
-  }
 
   function handleAnalyze() {
     if (!activeTrip || !itineraryText.trim()) {
@@ -149,11 +61,9 @@ export default function AssistantPage({
     if (result.length === 0) {
       setParsedDays([])
       setImportMessage(null)
-
       setAnalysisError(
-        'Non ho riconosciuto nessuna giornata. Controlla che ogni giorno abbia un titolo come "## 11 agosto - Sintra e Cascais".',
+        'Non ho riconosciuto nessuna giornata. Usa titoli come "## 11 agosto - Sintra e Cascais".',
       )
-
       return
     }
 
@@ -193,7 +103,6 @@ export default function AssistantPage({
         const normalizedTitle = activity.title
           .trim()
           .toLowerCase()
-
         const activityKey =
           `${day.date}|${activity.time}|${normalizedTitle}`
 
@@ -216,206 +125,122 @@ export default function AssistantPage({
       })
     })
 
-    if (skippedCount > 0) {
-      setImportMessage(
-        `${importedCount} attività importate. ${skippedCount} attività duplicate ignorate.`,
-      )
-
-      return
-    }
-
     setImportMessage(
-      `${importedCount} attività importate correttamente.`,
+      skippedCount > 0
+        ? `${importedCount} attività importate. ${skippedCount} duplicati ignorati.`
+        : `${importedCount} attività importate correttamente.`,
     )
   }
 
   return (
-    <section>
-      <div className="rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-sm">
-        <p className="text-sm font-semibold text-blue-100">
-          Assistente Viaggio
-        </p>
+    <section className="space-y-6">
+      <TravelAiPanel activeTrip={activeTrip} />
 
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">
-          Importa il tuo itinerario
-        </h1>
-
-        <p className="mt-3 text-sm leading-6 text-blue-100">
-          Incolla il programma creato con
-          un’intelligenza artificiale, copiato da un
-          documento o preparato personalmente.
-        </p>
-      </div>
-
-      {!activeTrip && (
-        <div className="mt-6 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
-          Crea o seleziona un viaggio prima di
-          importare un itinerario.
+      <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-blue-600">
+              Import itinerario
+            </p>
+            <h2 className="mt-1 text-2xl font-bold">
+              Porta un programma nel Roadbook
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Incolla un itinerario già preparato e TravelG lo divide per giorno e attività.
+            </p>
+          </div>
+          <span className="text-3xl">📋</span>
         </div>
-      )}
 
-      {activeTrip && (
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Viaggio selezionato
-          </p>
-
-          <p className="mt-1 font-semibold text-slate-900">
-            {activeTrip.destination}
-          </p>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Dal {activeTrip.startDate} al{' '}
-            {activeTrip.endDate}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <label htmlFor="itinerary">
-          <span className="block text-base font-bold text-slate-900">
-            Incolla l’itinerario
-          </span>
-
-          <span className="mt-1 block text-sm leading-6 text-slate-500">
-            Puoi includere date, orari, luoghi,
-            trasporti, hotel e note.
-          </span>
-        </label>
+        {!activeTrip && (
+          <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
+            Crea o seleziona un viaggio prima di importare un itinerario.
+          </div>
+        )}
 
         <textarea
-          id="itinerary"
           value={itineraryText}
-          onChange={(event) =>
-            handleTextChange(event.target.value)
-          }
-          placeholder={`Esempio:
-
-## 11 agosto - Sintra e Cascais
-- 08:30 Partenza da Lisbona
-- Palazzo Pena
-- Quinta da Regaleira
-- Cabo da Roca
-- Cascais`}
-          className="mt-4 min-h-80 w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+          onChange={(event) => {
+            setItineraryText(event.target.value)
+            setParsedDays([])
+            setAnalysisError(null)
+            setImportMessage(null)
+          }}
+          placeholder={`Esempio:\n\n## 11 agosto - Sintra e Cascais\n- 08:30 Partenza da Lisbona\n- Palazzo Pena\n- Quinta da Regaleira\n- Cascais`}
+          className="mt-5 min-h-52 w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
         />
-
-        <p className="mt-2 text-right text-xs text-slate-400">
-          {itineraryText.length} caratteri
-        </p>
 
         <button
           type="button"
           onClick={handleAnalyze}
-          disabled={
-            !activeTrip || !itineraryText.trim()
-          }
-          className="mt-4 w-full rounded-2xl bg-blue-600 px-4 py-3 font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300"
+          disabled={!activeTrip || !itineraryText.trim()}
+          className="mt-3 w-full rounded-2xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:bg-slate-300"
         >
           ✨ Analizza itinerario
         </button>
-      </div>
+      </article>
 
       {analysisError && (
-        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {analysisError}
         </div>
       )}
 
       {parsedDays.length > 0 && (
-        <div className="mt-7">
+        <div>
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-blue-600">
-                Anteprima importazione
+                Anteprima
               </p>
-
               <h2 className="mt-1 text-2xl font-bold">
-                Itinerario riconosciuto
+                {totalActivityCount} attività riconosciute
               </h2>
             </div>
-
             <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-              {parsedDays.length}{' '}
-              {parsedDays.length === 1
-                ? 'giorno'
-                : 'giorni'}
+              {parsedDays.length} giorni
             </span>
           </div>
 
-          <div className="mt-4 rounded-2xl bg-slate-100 p-4">
-            <p className="font-semibold text-slate-900">
-              {totalActivityCount}{' '}
-              {totalActivityCount === 1
-                ? 'attività riconosciuta'
-                : 'attività riconosciute'}
-            </p>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Controlla il risultato prima di
-              importarlo nel Roadbook.
-            </p>
-          </div>
-
-          <div className="mt-5 space-y-4">
+          <div className="mt-4 space-y-3">
             {parsedDays.map((day) => (
               <article
                 key={day.date}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
                   {day.date}
                 </p>
-
-                <h3 className="mt-1 text-lg font-bold capitalize text-slate-900">
+                <h3 className="mt-1 font-bold capitalize">
                   {formatPreviewDate(day.date)}
                 </h3>
-
-                <p className="mt-1 text-sm font-medium text-slate-500">
+                <p className="mt-1 text-sm text-slate-500">
                   {day.label}
                 </p>
-
-                {day.activities.length === 0 ? (
-                  <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                    Nessuna attività riconosciuta.
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {day.activities.map(
-                      (activity, index) => (
-                        <div
-                          key={`${day.date}-${activity.title}-${index}`}
-                          className="flex gap-3 rounded-2xl bg-slate-50 p-3"
-                        >
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm">
-                            {getCategoryIcon(
-                              activity.category,
-                              activity.title,
-                            )}
+                <div className="mt-3 space-y-2">
+                  {day.activities.map((activity, index) => (
+                    <div
+                      key={`${day.date}-${activity.title}-${index}`}
+                      className="rounded-xl bg-slate-50 px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="font-medium">
+                          {activity.title}
+                        </span>
+                        {activity.time && (
+                          <span className="text-xs font-semibold text-blue-600">
+                            {activity.time}
                           </span>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="break-words font-semibold text-slate-900">
-                                {activity.title}
-                              </p>
-
-                              {activity.time && (
-                                <span className="shrink-0 text-xs font-semibold text-blue-600">
-                                  {activity.time}
-                                </span>
-                              )}
-                            </div>
-
-                            <p className="mt-1 text-xs capitalize text-slate-500">
-                              {activity.category}
-                            </p>
-                          </div>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                )}
+                        )}
+                      </div>
+                      {activity.location && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          📍 {activity.location}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </article>
             ))}
           </div>
@@ -423,7 +248,7 @@ export default function AssistantPage({
           <button
             type="button"
             onClick={handleImportIntoRoadbook}
-            className="mt-6 w-full rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white transition active:scale-[0.99]"
+            className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white"
           >
             📖 Importa nel Roadbook
           </button>
@@ -431,12 +256,9 @@ export default function AssistantPage({
           {importMessage && (
             <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
               <p>{importMessage}</p>
-
               <button
                 type="button"
-                onClick={() =>
-                  navigate('/roadbook')
-                }
+                onClick={() => navigate('/roadbook')}
                 className="mt-3 rounded-xl bg-green-600 px-4 py-2 font-semibold text-white"
               >
                 Apri il Roadbook →
