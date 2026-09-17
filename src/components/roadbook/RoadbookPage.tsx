@@ -61,6 +61,15 @@ const categoryOptions: {
   },
 ]
 
+function getLocalDateId(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function formatLongDate(date: string): string {
   return new Intl.DateTimeFormat('it-IT', {
     weekday: 'long',
@@ -269,6 +278,13 @@ export default function RoadbookPage({
   const [
     selectedDayId,
     setSelectedDayId,
+  ] = useState<string | null>(() =>
+    getLocalDateId(),
+  )
+
+  const [
+    formDayId,
+    setFormDayId,
   ] = useState<string | null>(null)
 
   const [
@@ -305,18 +321,31 @@ export default function RoadbookPage({
     setTransportType,
   ] = useState<TransportType>('car')
 
+  const todayId = getLocalDateId()
+
+  const defaultDayId =
+    days.find((day) => day.id === todayId)?.id ??
+    days.find((day) => day.id > todayId)?.id ??
+    days[days.length - 1]?.id ??
+    null
+
   const currentDayId =
     days.some(
       (day) =>
         day.id === selectedDayId,
     )
       ? selectedDayId
-      : days[0]?.id ?? null
+      : defaultDayId
 
   const selectedDay =
     days.find(
       (day) => day.id === currentDayId,
     ) ?? null
+
+  const formSelectedDay =
+    days.find(
+      (day) => day.id === formDayId,
+    ) ?? selectedDay
 
   const selectedDayActivities = useMemo(
     () =>
@@ -413,6 +442,7 @@ export default function RoadbookPage({
   function openActivityForm() {
     resetForm()
     setEditingActivityId(null)
+    setFormDayId(currentDayId)
     setIsFormOpen(true)
   }
 
@@ -420,6 +450,7 @@ export default function RoadbookPage({
     activity: RoadbookActivity,
   ) {
     setSelectedDayId(activity.dayId)
+    setFormDayId(activity.dayId)
     setEditingActivityId(activity.id)
     setTime(activity.time)
     setTitle(activity.title)
@@ -438,6 +469,7 @@ export default function RoadbookPage({
 
   function closeActivityForm() {
     resetForm()
+    setFormDayId(null)
     setEditingActivityId(null)
     setIsFormOpen(false)
   }
@@ -447,15 +479,18 @@ export default function RoadbookPage({
   ) {
     event.preventDefault()
 
+    const targetDayId =
+      formDayId ?? currentDayId
+
     if (
-      !currentDayId ||
+      !targetDayId ||
       !title.trim()
     ) {
       return
     }
 
     const activityInput = {
-      dayId: currentDayId,
+      dayId: targetDayId,
       time,
       title: title.trim(),
       location: location.trim(),
@@ -476,6 +511,7 @@ export default function RoadbookPage({
       createActivity(activityInput)
     }
 
+    setSelectedDayId(targetDayId)
     closeActivityForm()
   }
 
@@ -604,7 +640,7 @@ export default function RoadbookPage({
     }
   }
 
-    if (!activeTrip) {
+  if (!activeTrip) {
     return (
       <section>
         <button
@@ -1178,13 +1214,16 @@ export default function RoadbookPage({
       <ActivityFormModal
         isOpen={isFormOpen}
         isEditing={isEditing}
-        selectedDay={selectedDay}
+        selectedDay={formSelectedDay}
+        days={days}
+        selectedDayId={formDayId ?? currentDayId}
         time={time}
         title={title}
         location={location}
         notes={notes}
         category={category}
         transportType={transportType}
+        onDayChange={setFormDayId}
         onTimeChange={setTime}
         onTitleChange={setTitle}
         onLocationChange={setLocation}
