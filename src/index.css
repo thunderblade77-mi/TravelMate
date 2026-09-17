@@ -5,7 +5,7 @@
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     sans-serif;
   color: #172033;
-  background-color: #eef3fb;
+  background-color: #edf3fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,7 +19,7 @@
 html {
   min-width: 320px;
   min-height: 100%;
-  background-color: #eef3fb;
+  background-color: #edf3fb;
 }
 
 body {
@@ -27,8 +27,22 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.10), transparent 28rem),
-    linear-gradient(180deg, #f8fbff 0%, #eef3fb 100%);
+    radial-gradient(circle at 12% 2%, rgba(96, 165, 250, 0.23), transparent 25rem),
+    radial-gradient(circle at 92% 20%, rgba(129, 140, 248, 0.18), transparent 26rem),
+    radial-gradient(circle at 48% 72%, rgba(45, 212, 191, 0.09), transparent 28rem),
+    linear-gradient(155deg, #f8fbff 0%, #eef4ff 36%, #f5f3ff 68%, #eef8f7 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255,255,255,0.86), transparent 18rem),
+    radial-gradient(circle at 82% 62%, rgba(255,255,255,0.48), transparent 24rem);
 }
 
 button,
@@ -54,6 +68,33 @@ a {
 
 #root {
   min-height: 100vh;
+}
+
+/* Il guscio principale lascia emergere lo sfondo sfumato globale. */
+#root > div.min-h-screen.bg-slate-50,
+#root > div.min-h-screen.bg-slate-50 > div.mx-auto.bg-slate-50 {
+  background: transparent !important;
+}
+
+/* Header e bottom bar con effetto glass, più coerente con il nuovo look. */
+#root header.bg-white\/95,
+#root nav.bg-white\/95 {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  box-shadow: 0 10px 34px rgba(30, 64, 175, 0.06);
+  backdrop-filter: blur(20px) saturate(145%);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+}
+
+/* Le card rimangono leggibili ma meno piatte sul gradiente. */
+#root main .bg-white {
+  background-color: rgba(255, 255, 255, 0.88);
+}
+
+#root main .shadow-sm {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 10px 28px rgba(30, 64, 175, 0.055);
 }
 
 .travelg-map-pin,
