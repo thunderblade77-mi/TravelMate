@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 
 import { supabase } from '../lib/supabase'
+import { loadActiveTripId } from '../services/tripStorage'
 import type { TripMemberOption } from '../types/tripMember'
 
 export function useTripMembers(tripId?: string) {
+  const resolvedTripId = tripId ?? loadActiveTripId() ?? undefined
   const [members, setMembers] = useState<TripMemberOption[]>([])
 
   useEffect(() => {
     let active = true
 
     async function loadMembers() {
-      if (!tripId) {
+      if (!resolvedTripId) {
         setMembers([])
         return
       }
@@ -18,7 +20,7 @@ export function useTripMembers(tripId?: string) {
       const { data: memberRows, error } = await supabase
         .from('trip_members')
         .select('user_id,role,joined_at')
-        .eq('trip_id', tripId)
+        .eq('trip_id', resolvedTripId)
         .order('joined_at', { ascending: true })
 
       if (error || !active) return
@@ -56,7 +58,7 @@ export function useTripMembers(tripId?: string) {
     return () => {
       active = false
     }
-  }, [tripId])
+  }, [resolvedTripId])
 
   return members
 }
