@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useTripMembers } from '../../hooks/useTripMembers'
 import {
@@ -50,6 +50,10 @@ function today() {
 
 export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel }: Props) {
   const members = useTripMembers(tripId)
+  const families = useMemo(
+    () => Array.from(new Set(members.map((member) => member.familyName).filter((name): name is string => Boolean(name)))),
+    [members],
+  )
   const [values, setValues] = useState<FormValues>({
     title: '', merchant: '', amount: '', category: 'restaurant', date: today(),
     paidBy: '', paymentMethod: 'card', splitKind: 'none', splitWith: [], familyNames: '', notes: '',
@@ -85,6 +89,14 @@ export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel
     )
   }
 
+  function toggleFamily(name: string) {
+    const current = values.familyNames.split(',').map((item) => item.trim()).filter(Boolean)
+    const next = current.includes(name)
+      ? current.filter((item) => item !== name)
+      : [...current, name]
+    update('familyNames', next.join(', '))
+  }
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     const amount = Number(values.amount)
@@ -105,6 +117,7 @@ export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel
   }
 
   const fieldClass = 'w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50'
+  const selectedFamilies = values.familyNames.split(',').map((item) => item.trim()).filter(Boolean)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -141,7 +154,7 @@ export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel
         {members.length > 0 ? (
           <select value={values.paidBy} onChange={(e) => update('paidBy', e.target.value)} className={fieldClass}>
             <option value="">Seleziona partecipante</option>
-            {members.map((member) => <option key={member.id} value={member.name}>{member.name}{member.role === 'owner' ? ' · organizzatore' : ''}</option>)}
+            {members.map((member) => <option key={member.id} value={member.name}>{member.name}{member.familyName ? ` · ${member.familyName}` : ''}{member.role === 'owner' ? ' · organizzatore' : ''}</option>)}
           </select>
         ) : (
           <input value={values.paidBy} onChange={(e) => update('paidBy', e.target.value)} className={fieldClass} placeholder="Nome di chi ha pagato" />
@@ -175,6 +188,7 @@ export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel
                 return (
                   <button key={member.id} type="button" onClick={() => toggleMember(member.name)} className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${selected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
                     <span className="mr-2">{selected ? '✓' : '○'}</span>{member.name}
+                    {member.familyName && <span className="mt-1 block text-[11px] font-medium opacity-70">{member.familyName}</span>}
                   </button>
                 )
               })}
@@ -188,9 +202,27 @@ export default function ExpenseForm({ tripId, initialExpense, onSubmit, onCancel
 
       {values.splitKind === 'families' && (
         <div>
-          <label className="mb-1 block text-sm font-medium">Famiglie</label>
-          <input value={values.familyNames} onChange={(e) => update('familyNames', e.target.value)} className={fieldClass} placeholder="Famiglia Rossi, Famiglia Bianchi" />
-          <p className="mt-1 text-xs text-slate-500">Separa i nuclei con una virgola. La gestione famiglie verrà collegata ai profili del gruppo.</p>
+          <label className="mb-2 block text-sm font-medium">Dividi tra famiglie</label>
+          {families.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2">
+              {families.map((family) => {
+                const selected = selectedFamilies.includes(family)
+                const familyMembers = members.filter((member) => member.familyName === family).length
+                return (
+                  <button key={family} type="button" onClick={() => toggleFamily(family)} className={`rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition ${selected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                    <span className="mr-2">{selected ? '✓' : '○'}</span>{family}
+                    <span className="mt-1 block text-[11px] font-medium opacity-70">{familyMembers} {familyMembers === 1 ? 'persona' : 'persone'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <>
+              <input value={values.familyNames} onChange={(e) => update('familyNames', e.target.value)} className={fieldClass} placeholder="Famiglia Rossi, Famiglia Bianchi" />
+              <p className="mt-2 rounded-2xl bg-amber-50 p-3 text-xs leading-5 text-amber-700">Nessun nucleo è ancora assegnato ai partecipanti. Puoi comunque inserire i nomi manualmente.</p>
+            </>
+          )}
+          <p className="mt-2 text-xs text-slate-500">La quota viene divisa in parti uguali tra i nuclei selezionati.</p>
         </div>
       )}
 
