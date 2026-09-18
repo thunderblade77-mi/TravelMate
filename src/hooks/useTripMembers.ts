@@ -7,18 +7,12 @@ import type { TripMemberOption } from '../types/tripMember'
 export function useTripMembers(tripId?: string) {
   const resolvedTripId = tripId ?? loadActiveTripId() ?? undefined
   const [members, setMembers] = useState<TripMemberOption[]>([])
-  const [loading, setLoading] = useState(Boolean(resolvedTripId))
-  const [error, setError] = useState<string | null>(null)
 
   const loadMembers = useCallback(async () => {
     if (!resolvedTripId) {
       setMembers([])
-      setLoading(false)
-      setError(null)
       return
     }
-
-    setLoading(true)
 
     const { data: memberRows, error: membersError } = await supabase
       .from('trip_members')
@@ -28,8 +22,6 @@ export function useTripMembers(tripId?: string) {
 
     if (membersError) {
       console.error('Errore caricamento partecipanti:', membersError)
-      setError('Impossibile sincronizzare i partecipanti.')
-      setLoading(false)
       return
     }
 
@@ -37,8 +29,6 @@ export function useTripMembers(tripId?: string) {
 
     if (ids.length === 0) {
       setMembers([])
-      setError(null)
-      setLoading(false)
       return
     }
 
@@ -66,8 +56,6 @@ export function useTripMembers(tripId?: string) {
         familyName: row.family_name?.trim() || undefined,
       })),
     )
-    setError(null)
-    setLoading(false)
   }, [resolvedTripId])
 
   useEffect(() => {
