@@ -19,7 +19,7 @@ export function useTripMembers(tripId?: string) {
 
       const { data: memberRows, error } = await supabase
         .from('trip_members')
-        .select('user_id,role,joined_at')
+        .select('user_id,role,joined_at,family_name')
         .eq('trip_id', resolvedTripId)
         .order('joined_at', { ascending: true })
 
@@ -50,6 +50,7 @@ export function useTripMembers(tripId?: string) {
           id: row.user_id,
           name: names.get(row.user_id) ?? 'Viaggiatore',
           role: row.role,
+          familyName: row.family_name?.trim() || undefined,
         })),
       )
     }
