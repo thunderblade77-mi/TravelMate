@@ -59,6 +59,8 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
   const [memoryDate, setMemoryDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [savingMemory, setSavingMemory] = useState(false)
   const [memoryError, setMemoryError] = useState<string | null>(null)
+  const [memoryPhoto, setMemoryPhoto] = useState<File | null>(null)
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
 
   async function reload() {
     const {
@@ -94,7 +96,24 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
     if (!activitiesResult.error) setActivities((activitiesResult.data ?? []) as Activity[])
     if (!ratingsResult.error) setRatings((ratingsResult.data ?? []) as Rating[])
     if (!visitsResult.error) setVisits((visitsResult.data ?? []) as Visit[])
-    if (!memoriesResult.error) setMemories((memoriesResult.data ?? []) as MemoryItem[])
+    if (!memoriesResult.error) {
+      const nextMemories = (memoriesResult.data ?? []) as MemoryItem[]
+      setMemories(nextMemories)
+
+      const signedEntries = await Promise.all(
+        nextMemories
+          .filter((memory) => memory.photo_url)
+          .map(async (memory) => {
+            const { data, error } = await supabase.storage
+              .from('travel-attachments')
+              .createSignedUrl(memory.photo_url!, 60 * 60)
+
+            return [memory.id, error ? '' : data.signedUrl] as const
+          }),
+      )
+
+      setPhotoUrls(Object.fromEntries(signedEntries.filter(([, url]) => url)))
+    }
   }
 
   useEffect(() => {
@@ -179,21 +198,60 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
     setSavingMemory(true)
     setMemoryError(null)
 
+    let photoPath: string | null = null
+
+    if (memoryPhoto) {
+      if (!memoryPhoto.type.startsWith('image/')) {
+        setMemoryError('Puoi allegare solo una foto.')
+        setSavingMemory(false)
+        return
+      }
+
+      if (memoryPhoto.size > 6 * 1024 * 1024) {
+        setMemoryError('Per ora usa una foto più piccola di 6 MB.')
+        setSavingMemory(false)
+        return
+      }
+
+      const extension = memoryPhoto.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+      photoPath = `${trip.id}/memories/${userId}/${crypto.randomUUID()}.${extension}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('travel-attachments')
+        .upload(photoPath, memoryPhoto, {
+          cacheControl: '3600',
+          contentType: memoryPhoto.type,
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error('Errore upload foto ricordo:', uploadError)
+        setMemoryError('Non sono riuscita a caricare la foto. Riprova.')
+        setSavingMemory(false)
+        return
+      }
+    }
+
     const { error } = await supabase.from('memory_items').insert({
       trip_id: trip.id,
       user_id: userId,
       title,
       location: memoryLocation.trim(),
+      photo_url: photoPath,
       taken_at: `${memoryDate}T12:00:00`,
       favorite: false,
     })
 
     if (error) {
+      if (photoPath) {
+        await supabase.storage.from('travel-attachments').remove([photoPath])
+      }
       console.error('Errore creazione ricordo:', error)
       setMemoryError('Non sono riuscita a salvare il ricordo. Riprova.')
     } else {
       setMemoryTitle('')
       setMemoryLocation('')
+      setMemoryPhoto(null)
       setShowMemoryForm(false)
       await reload()
     }
@@ -217,7 +275,15 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
     if (!window.confirm(`Eliminare il ricordo “${memory.title}”?`)) return
 
     const { error } = await supabase.from('memory_items').delete().eq('id', memory.id)
-    if (!error) await reload()
+    if (!error) {
+      if (memory.photo_url) {
+        const { error: storageError } = await supabase.storage
+          .from('travel-attachments')
+          .remove([memory.photo_url])
+        if (storageError) console.error('Errore eliminazione foto ricordo:', storageError)
+      }
+      await reload()
+    }
   }
 
   const storyItems = memories.length > 0
@@ -304,6 +370,23 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
                 placeholder="Luogo (facoltativo)"
                 className="w-full rounded-xl border border-white bg-white p-3 text-sm shadow-sm outline-none focus:ring-4 focus:ring-amber-100"
               />
+              <label className="block rounded-xl border border-dashed border-amber-300 bg-white p-3 text-sm font-semibold text-slate-700 shadow-sm">
+                <span className="block">📷 Aggiungi una foto</span>
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  JPG, PNG o WebP · massimo 6 MB
+                </span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) => setMemoryPhoto(event.target.files?.[0] ?? null)}
+                  className="mt-2 block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:font-bold file:text-amber-800"
+                />
+                {memoryPhoto && (
+                  <span className="mt-2 block truncate text-xs font-medium text-emerald-700">
+                    ✓ {memoryPhoto.name}
+                  </span>
+                )}
+              </label>
               <input
                 type="date"
                 min={trip.startDate}
@@ -339,6 +422,14 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
                 <div key={item.id} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
                   <span className="text-xl">{item.favorite ? '⭐' : '📸'}</span>
                   <div className="min-w-0 flex-1">
+                    {item.memory?.photo_url && photoUrls[item.id] && (
+                      <img
+                        src={photoUrls[item.id]}
+                        alt=""
+                        loading="lazy"
+                        className="mb-3 h-44 w-full rounded-2xl object-cover shadow-sm"
+                      />
+                    )}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{item.title}</p>
@@ -447,7 +538,7 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
           </div>
 
           <p className="mt-5 rounded-2xl bg-blue-50 p-3 text-xs font-medium leading-5 text-blue-700">
-            La struttura cloud per le foto è pronta. L’acquisizione foto/geolocalizzazione verrà collegata al layer nativo iOS e Android, senza simulare funzioni che il browser non può garantire in background.
+            Le foto del diario sono private al gruppo e salvate nel cloud. La geolocalizzazione automatica verrà collegata al layer nativo iOS e Android.
           </p>
         </div>
       )}
