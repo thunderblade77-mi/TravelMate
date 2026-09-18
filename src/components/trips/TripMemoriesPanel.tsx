@@ -32,6 +32,16 @@ type Visit = {
   visited_at: string
 }
 
+type MemoryItem = {
+  id: string
+  user_id: string
+  title: string
+  location: string
+  photo_url: string | null
+  taken_at: string
+  favorite: boolean
+}
+
 function placeKey(activity: Activity) {
   return activity.id
 }
@@ -41,7 +51,14 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [ratings, setRatings] = useState<Rating[]>([])
   const [visits, setVisits] = useState<Visit[]>([])
+  const [memories, setMemories] = useState<MemoryItem[]>([])
   const [open, setOpen] = useState(false)
+  const [showMemoryForm, setShowMemoryForm] = useState(false)
+  const [memoryTitle, setMemoryTitle] = useState('')
+  const [memoryLocation, setMemoryLocation] = useState('')
+  const [memoryDate, setMemoryDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [savingMemory, setSavingMemory] = useState(false)
+  const [memoryError, setMemoryError] = useState<string | null>(null)
 
   async function reload() {
     const {
@@ -51,7 +68,7 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
     if (!user) return
     setUserId(user.id)
 
-    const [activitiesResult, ratingsResult, visitsResult] = await Promise.all([
+    const [activitiesResult, ratingsResult, visitsResult, memoriesResult] = await Promise.all([
       supabase
         .from('roadbook_activities')
         .select('id,title,location,day_id,completed')
@@ -67,15 +84,39 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
         .select('id,place_name,location,source,visited_at')
         .eq('trip_id', trip.id)
         .order('visited_at', { ascending: true }),
+      supabase
+        .from('memory_items')
+        .select('id,user_id,title,location,photo_url,taken_at,favorite')
+        .eq('trip_id', trip.id)
+        .order('taken_at', { ascending: true }),
     ])
 
     if (!activitiesResult.error) setActivities((activitiesResult.data ?? []) as Activity[])
     if (!ratingsResult.error) setRatings((ratingsResult.data ?? []) as Rating[])
     if (!visitsResult.error) setVisits((visitsResult.data ?? []) as Visit[])
+    if (!memoriesResult.error) setMemories((memoriesResult.data ?? []) as MemoryItem[])
   }
 
   useEffect(() => {
     void reload()
+
+    const channel = supabase
+      .channel(`travelg-memories-${trip.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'memory_items', filter: `trip_id=eq.${trip.id}` },
+        () => void reload(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'place_ratings', filter: `trip_id=eq.${trip.id}` },
+        () => void reload(),
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
   }, [trip.id])
 
   const myRatings = useMemo(
@@ -131,47 +172,210 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
     await reload()
   }
 
-  const storyItems = visits.length > 0
-    ? visits.map((visit) => ({
-        id: visit.id,
-        title: visit.place_name,
-        detail: visit.location,
-        date: visit.visited_at.slice(0, 10),
-        badge:
-          visit.source === 'gps'
-            ? 'GPS'
-            : visit.source === 'photo'
-              ? 'Foto'
-              : 'Manuale',
+  async function addMemory() {
+    const title = memoryTitle.trim()
+    if (!userId || !title || !memoryDate) return
+
+    setSavingMemory(true)
+    setMemoryError(null)
+
+    const { error } = await supabase.from('memory_items').insert({
+      trip_id: trip.id,
+      user_id: userId,
+      title,
+      location: memoryLocation.trim(),
+      taken_at: `${memoryDate}T12:00:00`,
+      favorite: false,
+    })
+
+    if (error) {
+      console.error('Errore creazione ricordo:', error)
+      setMemoryError('Non sono riuscita a salvare il ricordo. Riprova.')
+    } else {
+      setMemoryTitle('')
+      setMemoryLocation('')
+      setShowMemoryForm(false)
+      await reload()
+    }
+
+    setSavingMemory(false)
+  }
+
+  async function toggleFavorite(memory: MemoryItem) {
+    if (memory.user_id !== userId) return
+
+    const { error } = await supabase
+      .from('memory_items')
+      .update({ favorite: !memory.favorite })
+      .eq('id', memory.id)
+
+    if (!error) await reload()
+  }
+
+  async function removeMemory(memory: MemoryItem) {
+    if (memory.user_id !== userId) return
+    if (!window.confirm(`Eliminare il ricordo “${memory.title}”?`)) return
+
+    const { error } = await supabase.from('memory_items').delete().eq('id', memory.id)
+    if (!error) await reload()
+  }
+
+  const storyItems = memories.length > 0
+    ? memories.map((memory) => ({
+        id: memory.id,
+        title: memory.title,
+        detail: memory.location,
+        date: memory.taken_at.slice(0, 10),
+        badge: memory.photo_url ? 'Foto' : 'Ricordo',
+        favorite: memory.favorite,
+        memory,
       }))
-    : activities.map((activity) => ({
-        id: activity.id,
-        title: activity.title,
-        detail: activity.location,
-        date: activity.day_id,
-        badge: 'Roadbook',
-      }))
+    : visits.length > 0
+      ? visits.map((visit) => ({
+          id: visit.id,
+          title: visit.place_name,
+          detail: visit.location,
+          date: visit.visited_at.slice(0, 10),
+          badge:
+            visit.source === 'gps'
+              ? 'GPS'
+              : visit.source === 'photo'
+                ? 'Foto'
+                : 'Manuale',
+          favorite: false,
+          memory: null,
+        }))
+      : activities.map((activity) => ({
+          id: activity.id,
+          title: activity.title,
+          detail: activity.location,
+          date: activity.day_id,
+          badge: 'Roadbook',
+          favorite: false,
+          memory: null,
+        }))
 
   return (
-    <section className="mt-5 rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <section className="mt-5 overflow-hidden rounded-3xl border border-amber-100 bg-white shadow-sm">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 p-5 text-left"
+        className="flex w-full items-center justify-between gap-4 bg-gradient-to-br from-white via-amber-50/50 to-orange-50/60 p-5 text-left"
       >
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-amber-600">Ricordi & rating</p>
-          <h2 className="mt-1 text-xl font-bold">La classifica del viaggio</h2>
+          <h2 className="mt-1 text-xl font-bold">Il diario del viaggio</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Valuta i luoghi da 1 a 10 e costruisci il racconto finale.
+            Ricordi condivisi, classifica dei luoghi e racconto finale.
           </p>
         </div>
-        <span className="text-2xl">{open ? '⌃' : '⭐'}</span>
+        <span className="text-2xl">{open ? '⌃' : '📸'}</span>
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 p-5 pt-4">
-          <div>
+        <div className="border-t border-amber-100 p-5 pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold">Memory Story</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Tutto il gruppo vede lo stesso diario, sincronizzato in tempo reale.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMemoryForm((value) => !value)}
+              className="shrink-0 rounded-2xl bg-amber-500 px-3 py-2 text-sm font-bold text-white shadow-md shadow-amber-100 active:scale-95"
+            >
+              + Ricordo
+            </button>
+          </div>
+
+          {showMemoryForm && (
+            <div className="mt-4 space-y-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
+              <input
+                value={memoryTitle}
+                onChange={(event) => setMemoryTitle(event.target.value)}
+                placeholder="Es. Tramonto a Cabo da Roca"
+                className="w-full rounded-xl border border-white bg-white p-3 text-sm shadow-sm outline-none focus:ring-4 focus:ring-amber-100"
+              />
+              <input
+                value={memoryLocation}
+                onChange={(event) => setMemoryLocation(event.target.value)}
+                placeholder="Luogo (facoltativo)"
+                className="w-full rounded-xl border border-white bg-white p-3 text-sm shadow-sm outline-none focus:ring-4 focus:ring-amber-100"
+              />
+              <input
+                type="date"
+                min={trip.startDate}
+                max={trip.endDate}
+                value={memoryDate}
+                onChange={(event) => setMemoryDate(event.target.value)}
+                className="w-full rounded-xl border border-white bg-white p-3 text-sm shadow-sm outline-none focus:ring-4 focus:ring-amber-100"
+              />
+              <button
+                type="button"
+                disabled={savingMemory || !memoryTitle.trim()}
+                onClick={() => void addMemory()}
+                className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 text-sm font-bold text-white shadow-md shadow-amber-100 disabled:opacity-50"
+              >
+                {savingMemory ? 'Salvataggio…' : 'Salva nel diario'}
+              </button>
+            </div>
+          )}
+
+          {memoryError && (
+            <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+              {memoryError}
+            </p>
+          )}
+
+          {storyItems.length === 0 ? (
+            <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+              Il diario è vuoto. Aggiungi il primo ricordo del viaggio.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {storyItems.map((item) => (
+                <div key={item.id} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
+                  <span className="text-xl">{item.favorite ? '⭐' : '📸'}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{item.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.date}{item.detail ? ` · ${item.detail}` : ''}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-500">
+                        {item.badge}
+                      </span>
+                    </div>
+
+                    {item.memory?.user_id === userId && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void toggleFavorite(item.memory!)}
+                          className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-amber-700 shadow-sm"
+                        >
+                          {item.favorite ? '★ Preferito' : '☆ Preferito'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeMemory(item.memory!)}
+                          className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-rose-600 shadow-sm"
+                        >
+                          Elimina
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-7 border-t border-slate-100 pt-5">
             <h3 className="font-bold">Valuta le tappe completate</h3>
             {activities.length === 0 ? (
               <p className="mt-2 rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
@@ -221,7 +425,7 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
           </div>
 
           <div className="mt-6">
-            <h3 className="font-bold">Classifica finale</h3>
+            <h3 className="font-bold">Classifica del gruppo</h3>
             {ranking.length === 0 ? (
               <p className="mt-2 text-sm text-slate-500">Le valutazioni del gruppo appariranno qui.</p>
             ) : (
@@ -242,31 +446,9 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
             )}
           </div>
 
-          <div className="mt-6">
-            <h3 className="font-bold">Memory Story</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              TravelG ordina automaticamente i luoghi visitati. Le foto con geolocalizzazione verranno agganciate nella fase mobile avanzata.
-            </p>
-
-            {storyItems.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {storyItems.map((item) => (
-                  <div key={item.id} className="flex gap-3 rounded-2xl bg-slate-50 p-3">
-                    <span className="text-xl">📸</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-semibold">{item.title}</p>
-                        <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-500">
-                          {item.badge}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{item.date}{item.detail ? ` · ${item.detail}` : ''}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <p className="mt-5 rounded-2xl bg-blue-50 p-3 text-xs font-medium leading-5 text-blue-700">
+            La struttura cloud per le foto è pronta. L’acquisizione foto/geolocalizzazione verrà collegata al layer nativo iOS e Android, senza simulare funzioni che il browser non può garantire in background.
+          </p>
         </div>
       )}
     </section>
