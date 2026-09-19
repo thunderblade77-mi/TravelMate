@@ -65,10 +65,6 @@ export default function AutoVisitDetector({ trip }: AutoVisitDetectorProps) {
         if (!activity) return
 
         try {
-          if (!activity.completed) {
-            toggleCompleted(activity.id)
-          }
-
           await recordActivityExperience({
             tripId: trip.id,
             activityId: activity.id,
@@ -79,6 +75,10 @@ export default function AutoVisitDetector({ trip }: AutoVisitDetectorProps) {
             source: 'gps',
             confidence: 1,
           })
+
+          if (!activity.completed) {
+            toggleCompleted(activity.id)
+          }
 
           setStatus(`✓ Visita rilevata e salvata nei ricordi: ${activity.title}`)
         } catch (error) {
