@@ -131,9 +131,28 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
         { event: '*', schema: 'public', table: 'place_ratings', filter: `trip_id=eq.${trip.id}` },
         () => void reload(),
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'place_visits', filter: `trip_id=eq.${trip.id}` },
+        () => void reload(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'roadbook_activities', filter: `trip_id=eq.${trip.id}` },
+        () => void reload(),
+      )
       .subscribe()
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void reload()
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
   }, [trip.id])
