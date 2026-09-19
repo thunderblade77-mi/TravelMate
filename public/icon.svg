@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#12304a"/><stop offset=".48" stop-color="#061727"/><stop offset="1" stop-color="#020811"/></linearGradient>
+ <linearGradient id="gold" x1=".15" y1=".1" x2=".85" y2=".9"><stop stop-color="#ffd979"/><stop offset=".5" stop-color="#e8ae43"/><stop offset="1" stop-color="#b87318"/></linearGradient>
+ <linearGradient id="ivory" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf5"/><stop offset="1" stop-color="#e8e3d9"/></linearGradient>
+ <filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity=".45"/></filter>
+</defs>
+<rect x="18" y="18" width="476" height="476" rx="108" fill="url(#bg)" filter="url(#shadow)"/>
+<path d="M352 129a145 145 0 1 0-2 251l-45-63a68 68 0 1 1 3-125z" fill="url(#ivory)"/>
+<path d="M161 343c70-27 84-75 66-100-14-20-37-27-55-31 52-19 112-28 186-26-57 13-96 31-119 50 39 21 55 48 46 76-11 34-58 47-124 31z" fill="url(#gold)"/>
+<path d="M359 144c-18 0-33 14-33 32 0 25 33 57 33 57s33-32 33-57c0-18-15-32-33-32zm0 18a14 14 0 1 1 0 28 14 14 0 0 1 0-28z" fill="url(#gold)"/>
+</svg>
