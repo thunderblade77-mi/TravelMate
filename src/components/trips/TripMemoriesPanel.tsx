@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { supabase } from '../../lib/supabase'
+import { saveActivityRating } from '../../services/tripExperience'
 import type { Trip } from '../../types/travel'
 
 type TripMemoriesPanelProps = {
@@ -189,25 +190,18 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
   async function rate(activity: Activity, score: number) {
     if (!userId) return
 
-    const key = placeKey(activity)
-    const existing = myRatings.get(key)
-
-    if (existing) {
-      await supabase
-        .from('place_ratings')
-        .update({ score, updated_at: new Date().toISOString() })
-        .eq('id', existing.id)
-    } else {
-      await supabase.from('place_ratings').insert({
-        trip_id: trip.id,
-        user_id: userId,
-        place_key: key,
-        place_name: activity.title,
+    try {
+      await saveActivityRating({
+        tripId: trip.id,
+        activityId: activity.id,
+        placeName: activity.title,
         score,
       })
+      await reload()
+    } catch (ratingError) {
+      console.error('Errore salvataggio valutazione:', ratingError)
+      setMemoryError('Non sono riuscita a salvare la valutazione. Riprova.')
     }
-
-    await reload()
   }
 
   async function addMemory() {
