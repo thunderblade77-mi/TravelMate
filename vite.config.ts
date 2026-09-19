@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon.svg'],
+      includeAssets: ['favicon.svg', 'travelg-icon.jpg'],
       manifest: {
         name: 'TravelG',
         short_name: 'TravelG',
@@ -23,15 +23,15 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
+            src: 'travelg-icon.jpg',
+            sizes: '256x256',
+            type: 'image/jpeg',
             purpose: 'any',
           },
           {
-            src: 'icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
+            src: 'travelg-icon.jpg',
+            sizes: '256x256',
+            type: 'image/jpeg',
             purpose: 'maskable',
           },
         ],
