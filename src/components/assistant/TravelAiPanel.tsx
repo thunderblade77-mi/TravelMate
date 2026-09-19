@@ -38,18 +38,30 @@ export default function TravelAiPanel({ activeTrip }: Props) {
   useEffect(() => {
     let active = true
 
-    void loadSyncedTravelPreferences()
-      .then((synced) => {
-        if (!active) return
-        setPreferences(synced)
-        setPreferencesSynced(true)
-      })
-      .catch(() => {
-        if (active) setPreferencesSynced(false)
-      })
+    const syncPreferences = () => {
+      void loadSyncedTravelPreferences()
+        .then((synced) => {
+          if (!active) return
+          setPreferences(synced)
+          setPreferencesSynced(true)
+        })
+        .catch(() => {
+          if (active) setPreferencesSynced(false)
+        })
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncPreferences()
+    }
+
+    syncPreferences()
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
 
     return () => {
       active = false
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }, [])
 
