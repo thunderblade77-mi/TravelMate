@@ -5,6 +5,7 @@ import {
 } from 'react'
 
 import { supabase } from '../lib/supabase'
+import { recordActivityExperience } from '../services/tripExperience'
 
 import type {
   ActivityCategory,
@@ -194,16 +195,19 @@ export function useRoadbook(tripId: string | null) {
       }
 
       if (nextCompleted) {
-        const { data: existingVisit, error: visitLookupError } = await supabase
-          .from('place_visits').select('id').eq('trip_id', tripId).eq('user_id', userId).eq('activity_id', activityId).maybeSingle()
-        if (visitLookupError) console.error('Errore verifica visita:', visitLookupError)
-        if (!visitLookupError && !existingVisit) {
-          const { error: visitError } = await supabase.from('place_visits').insert({
-            trip_id: tripId, user_id: userId, activity_id: activityId,
-            place_name: currentActivity.title, location: currentActivity.location ?? '',
-            source: 'manual', confidence: 1, visited_at: new Date().toISOString(),
+        try {
+          await recordActivityExperience({
+            tripId,
+            activityId,
+            placeName: currentActivity.title,
+            location: currentActivity.location ?? '',
+            source: 'manual',
+            confidence: 1,
           })
-          if (visitError) console.error('Errore registrazione visita:', visitError)
+        } catch (experienceError) {
+          console.error('Errore registrazione esperienza:', experienceError)
+          setError('Attività completata, ma il ricordo non è stato sincronizzato. Riprova più tardi.')
+          return
         }
       }
       setError(null)
