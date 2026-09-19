@@ -117,11 +117,24 @@ export function useRoadbook(tripId: string | null) {
 
   useEffect(() => {
     if (!tripId) return
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void reload()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     const channel = supabase
       .channel(`travelg-roadbook-${tripId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'roadbook_activities', filter: `trip_id=eq.${tripId}` }, () => { void reload() })
       .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      void supabase.removeChannel(channel)
+    }
   }, [tripId, reload])
 
   function createActivity(input: Omit<CreateRoadbookActivityInput, 'tripId'>) {
