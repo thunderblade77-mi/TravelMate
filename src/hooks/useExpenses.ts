@@ -231,7 +231,18 @@ export function useExpenses(
       )
       .subscribe()
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void reloadExpenses()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
   }, [tripId, reloadExpenses])
