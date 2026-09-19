@@ -208,6 +208,8 @@ export function useMapPoints() {
   }
 
   function removeMapPoint(id: string) {
+    const removedPoint = mapPoints.find((point) => point.id === id)
+
     setMapPoints((current) =>
       current.filter((point) => point.id !== id),
     )
@@ -216,6 +218,21 @@ export function useMapPoints() {
       .from('map_points')
       .delete()
       .eq('id', id)
+      .then(({ error }) => {
+        if (!error) return
+
+        console.error('Errore eliminazione punto mappa:', error)
+
+        if (removedPoint) {
+          setMapPoints((current) =>
+            current.some((point) => point.id === removedPoint.id)
+              ? current
+              : [...current, removedPoint].sort((a, b) =>
+                  a.createdAt.localeCompare(b.createdAt),
+                ),
+          )
+        }
+      })
   }
 
   function getTripMapPoints(
