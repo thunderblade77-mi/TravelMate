@@ -395,7 +395,17 @@ export default function TripGroupPanel({ trip, onShareTrip }: TripGroupPanelProp
         })
         .eq('id', poll.id)
 
-      if (pollError) throw pollError
+      if (pollError) {
+        const { error: rollbackError } = await supabase
+          .from('roadbook_activities')
+          .delete()
+          .eq('id', activityId)
+
+        if (rollbackError) {
+          console.error('Errore rollback attività da sondaggio:', rollbackError)
+        }
+        throw pollError
+      }
 
       await supabase.from('trip_messages').insert({
         trip_id: trip.id,
