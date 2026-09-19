@@ -68,7 +68,15 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) {
+      setUserId(null)
+      setActivities([])
+      setRatings([])
+      setVisits([])
+      setMemories([])
+      setPhotoUrls({})
+      return
+    }
     setUserId(user.id)
 
     const [activitiesResult, ratingsResult, visitsResult, memoriesResult] = await Promise.all([
@@ -274,19 +282,26 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
 
   async function toggleFavorite(memory: MemoryItem) {
     if (memory.user_id !== userId) return
+    setMemoryError(null)
 
     const { error } = await supabase
       .from('memory_items')
       .update({ favorite: !memory.favorite })
       .eq('id', memory.id)
 
-    if (!error) await reload()
+    if (!error) {
+      await reload()
+    } else {
+      console.error('Errore aggiornamento preferito:', error)
+      setMemoryError('Non sono riuscita ad aggiornare il ricordo. Riprova.')
+    }
   }
 
   async function removeMemory(memory: MemoryItem) {
     if (memory.user_id !== userId) return
     if (!window.confirm(`Eliminare il ricordo “${memory.title}”?`)) return
 
+    setMemoryError(null)
     const { error } = await supabase.from('memory_items').delete().eq('id', memory.id)
     if (!error) {
       if (memory.photo_url) {
@@ -296,6 +311,9 @@ export default function TripMemoriesPanel({ trip }: TripMemoriesPanelProps) {
         if (storageError) console.error('Errore eliminazione foto ricordo:', storageError)
       }
       await reload()
+    } else {
+      console.error('Errore eliminazione ricordo:', error)
+      setMemoryError('Non sono riuscita a eliminare il ricordo. Riprova.')
     }
   }
 
