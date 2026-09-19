@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { useMapPoints } from '../../hooks/useMapPoints'
 import { useRoadbook } from '../../hooks/useRoadbook'
-import { supabase } from '../../lib/supabase'
+import { recordActivityExperience } from '../../services/tripExperience'
 import { watchNearbyVisits } from '../../services/visitDetection'
 import type { Trip } from '../../types/travel'
 
@@ -62,39 +62,27 @@ export default function AutoVisitDetector({ trip }: AutoVisitDetectorProps) {
         const activity = activities.find((item) => item.id === match.id)
         if (!activity) return
 
-        if (!activity.completed) {
-          toggleCompleted(activity.id)
-        }
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (user) {
-          const { data: existing } = await supabase
-            .from('place_visits')
-            .select('id')
-            .eq('trip_id', trip.id)
-            .eq('user_id', user.id)
-            .eq('activity_id', activity.id)
-            .limit(1)
-
-          if (!existing?.length) {
-            await supabase.from('place_visits').insert({
-              trip_id: trip.id,
-              user_id: user.id,
-              activity_id: activity.id,
-              place_name: activity.title,
-              location: activity.location,
-              latitude: match.latitude,
-              longitude: match.longitude,
-              source: 'gps',
-              confidence: 1,
-            })
+        try {
+          if (!activity.completed) {
+            toggleCompleted(activity.id)
           }
-        }
 
-        setStatus(`✓ Visita rilevata: ${activity.title}`)
+          await recordActivityExperience({
+            tripId: trip.id,
+            activityId: activity.id,
+            placeName: activity.title,
+            location: activity.location || match.location,
+            latitude: match.latitude,
+            longitude: match.longitude,
+            source: 'gps',
+            confidence: 1,
+          })
+
+          setStatus(`✓ Visita rilevata e salvata nei ricordi: ${activity.title}`)
+        } catch (error) {
+          console.error('Errore salvataggio visita GPS:', error)
+          setStatus(`Visita rilevata: ${activity.title} · sincronizzazione in attesa`)
+        }
       },
       (error) => {
         if (error.code === error.PERMISSION_DENIED) {
