@@ -23,9 +23,11 @@ export default function AutoVisitDetector({ trip }: AutoVisitDetectorProps) {
 
   const targets = useMemo(() => {
     const points = getTripMapPoints(trip.id)
+    const today = new Date()
+    const todayId = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
     return activities
-      .filter((activity) => activity.mapPointId)
+      .filter((activity) => activity.dayId === todayId && activity.mapPointId && !activity.completed)
       .map((activity) => {
         const point = points.find((item) => item.id === activity.mapPointId)
         if (!point) return null
