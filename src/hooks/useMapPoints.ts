@@ -181,9 +181,12 @@ export function useMapPoints() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) return
+      if (!user) {
+        setMapPoints((current) => current.filter((point) => point.id !== newPoint.id))
+        return
+      }
 
-      await supabase.from('map_points').insert({
+      const { error } = await supabase.from('map_points').insert({
         id: newPoint.id,
         trip_id: newPoint.tripId,
         created_by: user.id,
@@ -194,6 +197,11 @@ export function useMapPoints() {
         type: newPoint.type,
         created_at: newPoint.createdAt,
       })
+
+      if (error) {
+        console.error('Errore salvataggio punto mappa:', error)
+        setMapPoints((current) => current.filter((point) => point.id !== newPoint.id))
+      }
     })()
 
     return newPoint
