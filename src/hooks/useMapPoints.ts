@@ -125,6 +125,15 @@ export function useMapPoints() {
 
     void loadCloudPoints()
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadCloudPoints()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     const channel = supabase
       .channel('travelg-map-points')
       .on(
@@ -142,6 +151,8 @@ export function useMapPoints() {
 
     return () => {
       cancelled = true
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
   }, [])
