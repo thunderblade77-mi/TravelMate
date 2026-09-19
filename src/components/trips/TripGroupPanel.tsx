@@ -215,6 +215,15 @@ export default function TripGroupPanel({ trip, onShareTrip }: TripGroupPanelProp
     setLoading(true)
     void reload()
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void reload()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     const channel = supabase
       .channel(`travelg-group-${trip.id}`)
       .on(
@@ -235,6 +244,8 @@ export default function TripGroupPanel({ trip, onShareTrip }: TripGroupPanelProp
       .subscribe()
 
     return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
   }, [trip.id])
