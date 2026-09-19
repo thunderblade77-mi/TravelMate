@@ -44,8 +44,6 @@ export async function recordCompletedVisit(input: CompletedVisitInput) {
 
   if (!error) return data.id as string
 
-  // Two devices can complete the same activity almost simultaneously.
-  // The database unique index is authoritative, so recover the existing visit.
   if (error.code === '23505') {
     const { data: racedVisit, error: racedVisitError } = await supabase
       .from('place_visits')
@@ -147,6 +145,31 @@ export async function createMemoryFromActivity(input: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Sessione non disponibile.')
 
+  const { data: existing, error: existingError } = await supabase
+    .from('memory_items')
+    .select('id,visit_id,photo_url')
+    .eq('user_id', user.id)
+    .eq('activity_id', input.activityId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
+  if (existing) {
+    const updates: Record<string, unknown> = {}
+    if (!existing.visit_id && input.visitId) updates.visit_id = input.visitId
+    if (!existing.photo_url && input.photoPath) updates.photo_url = input.photoPath
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updateError } = await supabase
+        .from('memory_items')
+        .update(updates)
+        .eq('id', existing.id)
+      if (updateError) throw updateError
+    }
+
+    return existing.id as string
+  }
+
   const { data, error } = await supabase
     .from('memory_items')
     .insert({
@@ -163,6 +186,31 @@ export async function createMemoryFromActivity(input: {
     .select('id')
     .single()
 
-  if (error) throw error
-  return data.id as string
+  if (!error) return data.id as string
+
+  if (error.code === '23505') {
+    const { data: racedMemory, error: racedMemoryError } = await supabase
+      .from('memory_items')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('activity_id', input.activityId)
+      .single()
+    if (racedMemoryError) throw racedMemoryError
+    return racedMemory.id as string
+  }
+
+  throw error
+}
+
+export async function recordActivityExperience(input: CompletedVisitInput) {
+  const visitId = await recordCompletedVisit(input)
+  const memoryId = await createMemoryFromActivity({
+    tripId: input.tripId,
+    activityId: input.activityId,
+    visitId,
+    title: input.placeName,
+    location: input.location,
+  })
+
+  return { visitId, memoryId }
 }
