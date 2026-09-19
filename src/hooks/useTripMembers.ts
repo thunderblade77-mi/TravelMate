@@ -65,6 +65,15 @@ export function useTripMembers(tripId?: string) {
   useEffect(() => {
     if (!resolvedTripId) return
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void loadMembers()
+      }
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
     const channel = supabase
       .channel(`travelg-members-${resolvedTripId}`)
       .on(
@@ -93,6 +102,8 @@ export function useTripMembers(tripId?: string) {
       .subscribe()
 
     return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
   }, [resolvedTripId, loadMembers])
