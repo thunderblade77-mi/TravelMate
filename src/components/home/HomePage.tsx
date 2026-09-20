@@ -126,7 +126,6 @@ export default function HomePage({
   const { completedCount, totalCount, progress } = useChecklist(activeTrip?.id)
   const { documentCount, expiredDocumentCount, expiringDocumentCount } = useDocuments(activeTrip?.id)
   const { expenseCount, totalSpent } = useExpenses(activeTrip?.id, activeTrip?.budget ?? 0)
-  const { activities } = useRoadbook(activeTrip?.id)
 
   const latitude = activeTrip?.latitude
   const longitude = activeTrip?.longitude
@@ -170,7 +169,7 @@ export default function HomePage({
   const weatherSummary = weather ? `${Math.round(weather.current.temperature)}°` : 'In aggiornamento'
   const cover = getDestinationCover(activeTrip.destination)
   const tripDays = Math.max(1, Math.round((parseDate(activeTrip.endDate).getTime() - parseDate(activeTrip.startDate).getTime()) / DAY_MS) + 1)
-  const stops = Array.from(new Set(activities.map((item) => item.location).filter(Boolean))).length
+  const stops = 0
 
   return (
     <section className="-mx-5 -mt-6">
