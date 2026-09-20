@@ -134,7 +134,7 @@ export default function HomePage({
   const { completedCount, totalCount, progress } = useChecklist(activeTrip?.id)
   const { documentCount, expiredDocumentCount, expiringDocumentCount } = useDocuments(activeTrip?.id)
   const { expenseCount, totalSpent } = useExpenses(activeTrip?.id, activeTrip?.budget ?? 0)
-  const { activities } = useRoadbook(activeTrip?.id ?? null)
+  const { activities } = useRoadbook(activeTrip?.id)
 
   const latitude = activeTrip?.latitude
   const longitude = activeTrip?.longitude
