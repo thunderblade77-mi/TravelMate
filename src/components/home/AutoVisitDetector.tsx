@@ -105,17 +105,17 @@ export default function AutoVisitDetector({ trip }: AutoVisitDetectorProps) {
       onClick={() => setEnabled((value) => !value)}
       className={`mt-4 flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left shadow-sm ${
         enabled
-          ? 'border-emerald-200 bg-emerald-50'
-          : 'border-slate-200 bg-white'
+          ? 'border-[#d7bd89] bg-[#fbf4e6]'
+          : 'border-stone-200 bg-[#fffdf9]'
       }`}
     >
       <div className="min-w-0">
-        <p className={`text-sm font-bold ${enabled ? 'text-emerald-700' : 'text-slate-700'}`}>
+        <p className={`text-sm font-bold ${enabled ? 'text-[#8b651e]' : 'text-slate-700'}`}>
           📍 Rilevamento visite {enabled ? 'attivo' : 'spento'}
         </p>
         <p className="mt-0.5 truncate text-xs text-slate-500">{status}</p>
       </div>
-      <span className={`relative h-7 w-12 shrink-0 rounded-full ${enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+      <span className={`relative h-7 w-12 shrink-0 rounded-full ${enabled ? 'bg-[#b88931]' : 'bg-stone-300'}`}>
         <span
           className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
             enabled ? 'left-6' : 'left-1'
