@@ -422,16 +422,16 @@ if (authLoading) {
       : null
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-slate-50">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+    <div className="min-h-screen bg-[#f6f1e9] text-slate-900">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#f6f1e9]">
+        <header className="sticky top-0 z-20 border-b border-stone-200/70 bg-[#fffdf9]/95 px-5 py-4 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => navigate('/')}
               className="min-w-0 text-left"
             >
-              <p className="text-xl font-bold tracking-tight">
+              <p className="text-xl font-black tracking-tight text-slate-950">
                 TravelG
               </p>
 
@@ -461,7 +461,7 @@ if (authLoading) {
               <button
                 type="button"
                 onClick={openCreateTripPage}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-2xl font-light text-white shadow-sm transition active:scale-95"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#c99a43] to-[#98701f] text-2xl font-light text-white shadow-sm transition active:scale-95"
                 aria-label="Crea un nuovo viaggio"
               >
                 +
@@ -629,13 +629,13 @@ if (authLoading) {
           </Routes>
         </main>
 
-        <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+        <nav className="fixed bottom-0 left-1/2 z-30 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-stone-200 bg-[#fffdf9]/95 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
           <button
             type="button"
             onClick={() => navigate('/')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isHomeRoute
-                ? 'text-blue-600'
+                ? 'text-[#a47724]'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -648,7 +648,7 @@ if (authLoading) {
             onClick={() => navigate('/trips')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isTripsRoute
-                ? 'text-blue-600'
+                ? 'text-[#a47724]'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -661,7 +661,7 @@ if (authLoading) {
             onClick={() => navigate('/map')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isMapRoute
-                ? 'text-blue-600'
+                ? 'text-[#a47724]'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -674,7 +674,7 @@ if (authLoading) {
             onClick={() => navigate('/weather')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isWeatherRoute
-                ? 'text-blue-600'
+                ? 'text-[#a47724]'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
@@ -687,7 +687,7 @@ if (authLoading) {
             onClick={() => navigate('/assistant')}
             className={`flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-medium transition ${
               isAssistantRoute
-                ? 'text-blue-600'
+                ? 'text-[#a47724]'
                 : 'text-slate-500 hover:text-slate-900'
             }`}
           >
