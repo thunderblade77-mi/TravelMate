@@ -70,7 +70,7 @@ function sortActivities(activities: RoadbookActivity[]): RoadbookActivity[] {
   })
 }
 
-export function useRoadbook(tripId: string | null) {
+export function useRoadbook(tripId?: string | null) {
   const [activities, setActivities] = useState<RoadbookActivity[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(Boolean(tripId))
