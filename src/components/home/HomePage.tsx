@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useChecklist } from '../../hooks/useChecklist'
 import { useDocuments } from '../../hooks/useDocuments'
 import { useExpenses } from '../../hooks/useExpenses'
+import { useRoadbook } from '../../hooks/useRoadbook'
 import { useWeather } from '../../hooks/useWeather'
 import type { Trip } from '../../types/travel'
 import AppIcon, { type IconName } from '../ui/AppIcon'
@@ -69,6 +70,16 @@ function getTripState(trip: Trip) {
   }
 }
 
+function getDestinationCover(destination: string) {
+  const key = destination.toLowerCase()
+  if (key.includes('portog') || key.includes('lisbon') || key.includes('lisboa')) return 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1200&q=85'
+  if (key.includes('spagna') || key.includes('madrid')) return 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1200&q=85'
+  if (key.includes('parigi') || key.includes('francia')) return 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=85'
+  if (key.includes('new york')) return 'https://images.unsplash.com/photo-1522083165195-3424ed129620?auto=format&fit=crop&w=1200&q=85'
+  if (key.includes('giapp') || key.includes('tokyo')) return 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1200&q=85'
+  return 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=85'
+}
+
 function QuickAction({
   icon,
   label,
@@ -82,21 +93,19 @@ function QuickAction({
   detail: string
   onClick: () => void
   badge?: string
-  tone: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-h-[6.4rem] overflow-hidden rounded-[1.35rem] border border-white/80 bg-white p-3.5 text-left shadow-[0_12px_35px_rgba(15,23,42,0.08)] transition duration-200 active:scale-[0.97]"
+      className="group relative min-h-[6.4rem] overflow-hidden rounded-[1.35rem] border border-stone-200/80 bg-white/90 p-3.5 text-left shadow-[0_12px_35px_rgba(50,40,25,0.06)] transition duration-200 active:scale-[0.97]"
     >
-      <div className={`absolute -right-5 -top-5 h-16 w-16 rounded-full opacity-20 blur-xl ${tone}`} />
       <div className="relative flex items-start justify-between gap-2">
-        <span className={`flex h-10 w-10 items-center justify-center rounded-2xl text-white shadow-lg ${tone}`}>
+        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-stone-200 bg-[#fbf8f2] text-slate-950">
           <AppIcon name={icon} className="h-5 w-5" />
         </span>
         {badge && (
-          <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-bold text-white">
+          <span className="rounded-full bg-[#a97a23] px-2 py-1 text-[10px] font-bold text-white">
             {badge}
           </span>
         )}
@@ -126,6 +135,7 @@ export default function HomePage({
   const { completedCount, totalCount, progress } = useChecklist(activeTrip?.id)
   const { documentCount, expiredDocumentCount, expiringDocumentCount } = useDocuments(activeTrip?.id)
   const { expenseCount, totalSpent } = useExpenses(activeTrip?.id, activeTrip?.budget ?? 0)
+  const { activities } = useRoadbook(activeTrip?.id ?? null)
 
   const latitude = activeTrip?.latitude
   const longitude = activeTrip?.longitude
@@ -170,113 +180,64 @@ export default function HomePage({
     ? `${Math.round(weather.current.temperature)}°`
     : 'In aggiornamento'
 
+  const tripState = getTripState(activeTrip)
+  const documentAlerts = expiredDocumentCount + expiringDocumentCount
+  const weatherSummary = weather ? `${Math.round(weather.current.temperature)}°` : 'In aggiornamento'
+  const cover = getDestinationCover(activeTrip.destination)
+  const tripDays = Math.max(1, Math.round((parseDate(activeTrip.endDate).getTime() - parseDate(activeTrip.startDate).getTime()) / DAY_MS) + 1)
+  const stops = Array.from(new Set(activities.map((item) => item.location).filter(Boolean))).length
+
   return (
-    <section>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_5px_rgba(16,185,129,0.12)]" />
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-blue-600">TravelG Live</p>
+    <section className="-mx-5 -mt-6">
+      <button type="button" onClick={onOpenRoadbook} className="relative block h-[25rem] w-full overflow-hidden text-left text-white">
+        <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/15 via-slate-950/20 to-slate-950/80" />
+        <div className="absolute inset-x-0 bottom-0 p-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/85">Il tuo viaggio</p>
+          <h1 className="mt-2 text-5xl font-semibold tracking-tight">{activeTrip.destination}</h1>
+          <p className="mt-2 text-lg font-medium text-white/90">{formatDate(activeTrip.startDate)} — {formatDate(activeTrip.endDate)}</p>
+          <div className="mt-5 flex gap-6 text-sm font-semibold text-white/95">
+            <span>▣ {tripDays} giorni</span><span>⌖ {stops || '—'} tappe</span><span>♙ {activeTrip.travelers} viaggiatori</span>
           </div>
-          <h1 className="mt-2 truncate text-[1.75rem] font-black tracking-tight text-slate-950">
-            {activeTrip.destination}
-          </h1>
-          <p className="mt-1 capitalize text-sm font-medium text-slate-500">{formatToday()}</p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => navigate('/trips')}
-          className="shrink-0 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 text-xs font-bold text-slate-600 shadow-lg backdrop-blur"
-        >
-          Cambia
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={onOpenRoadbook}
-        className="relative mt-5 w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 p-5 text-left text-white shadow-[0_22px_55px_rgba(37,99,235,0.28)] transition active:scale-[0.99]"
-      >
-        <div className="absolute -right-14 -top-14 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-cyan-300/10 blur-2xl" />
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-blue-100">La tua giornata</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight">{tripState.label}</h2>
-            <p className="mt-1 text-sm font-medium text-blue-100/80">{tripState.detail}</p>
-          </div>
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 backdrop-blur">
-            <AppIcon name="book" className="h-6 w-6" />
-          </span>
-        </div>
-
-        <div className="relative mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold">Apri il Roadbook di oggi</p>
-            <p className="mt-0.5 truncate text-[11px] text-blue-100/75">
-              {formatDate(activeTrip.startDate)} → {formatDate(activeTrip.endDate)}
-            </p>
-          </div>
-          <span className="text-xl">→</span>
         </div>
       </button>
 
-      <div className="mt-4 grid grid-cols-3 gap-2.5">
-        <QuickAction icon="book" label="Roadbook" detail="Programma" onClick={onOpenRoadbook} tone="bg-gradient-to-br from-blue-500 to-blue-700" />
-        <QuickAction icon="map" label="Mappa" detail="Luoghi" onClick={onOpenMap} tone="bg-gradient-to-br from-cyan-500 to-blue-600" />
-        <QuickAction icon="ticket" label="Prenotazioni" detail="Documenti" onClick={() => navigate('/documents')} badge={documentAlerts > 0 ? String(documentAlerts) : undefined} tone="bg-gradient-to-br from-violet-500 to-indigo-600" />
-        <QuickAction icon="wallet" label="Spese" detail={expenseCount > 0 ? formatCurrency(totalSpent) : 'Dividi costi'} onClick={() => navigate('/expenses')} badge={expenseCount > 0 ? String(expenseCount) : undefined} tone="bg-gradient-to-br from-emerald-500 to-teal-600" />
-        <QuickAction icon="sparkles" label="TravelG AI" detail="Chiedi ora" onClick={() => navigate('/assistant')} tone="bg-gradient-to-br from-fuchsia-500 to-violet-600" />
-        <QuickAction icon="users" label="Gruppo" detail="Chat e sondaggi" onClick={() => navigate('/trips')} badge={String(activeTrip.travelers)} tone="bg-gradient-to-br from-orange-400 to-rose-500" />
-      </div>
-
-      <AutoVisitDetector trip={activeTrip} />
-
-      <div className="mt-4 grid grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={onOpenChecklist}
-          className="rounded-[1.35rem] border border-white/80 bg-white p-4 text-left shadow-[0_12px_35px_rgba(15,23,42,0.07)] active:scale-[0.99]"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <AppIcon name="check" className="h-4.5 w-4.5" />
-            </span>
-            <span className="text-xs font-black text-blue-600">{progress}%</span>
-          </div>
-          <p className="mt-3 text-sm font-extrabold">Checklist</p>
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            {totalCount === 0 ? 'Nessun elemento' : `${completedCount}/${totalCount} completati`}
-          </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all" style={{ width: `${progress}%` }} />
-          </div>
+      <div className="relative -mt-5 px-5 pb-2">
+        <button type="button" onClick={onOpenRoadbook} className="flex w-full items-center gap-4 rounded-[1.8rem] border border-stone-200/80 bg-[#fffdf9] p-4 text-left text-slate-950 shadow-[0_18px_45px_rgba(55,43,25,0.14)] active:scale-[0.99]">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#c99a43] to-[#98701f] text-white"><AppIcon name="book" className="h-7 w-7" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-[10px] font-extrabold uppercase tracking-[0.2em] text-[#a47724]">{tripState.label}</span><strong className="mt-1 block truncate text-lg font-black">Apri il Roadbook di oggi</strong><span className="mt-0.5 block truncate text-xs text-slate-500">{tripState.detail}</span></span>
+          <span className="text-2xl text-[#a47724]">›</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => navigate('/weather')}
-          className="rounded-[1.35rem] border border-white/80 bg-white p-4 text-left shadow-[0_12px_35px_rgba(15,23,42,0.07)] active:scale-[0.99]"
-        >
-          <div className="flex items-center justify-between">
-            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white">
-              <AppIcon name="weather" className="h-4.5 w-4.5" />
-            </span>
-            <span className="text-lg font-black text-slate-900">{hasCoordinates ? weatherSummary : '—'}</span>
-          </div>
-          <p className="mt-3 text-sm font-extrabold">Meteo</p>
-          <p className="mt-0.5 truncate text-[11px] text-slate-500">
-            {hasCoordinates ? 'Previsioni del viaggio' : 'Aggiungi la posizione'}
-          </p>
-        </button>
-      </div>
+        <div className="mt-5 grid grid-cols-3 gap-2.5">
+          <QuickAction icon="book" label="Roadbook" detail="Programma" onClick={onOpenRoadbook} />
+          <QuickAction icon="map" label="Mappa" detail="Luoghi e tappe" onClick={onOpenMap} />
+          <QuickAction icon="ticket" label="Prenotazioni" detail="Documenti" onClick={() => navigate('/documents')} badge={documentAlerts > 0 ? String(documentAlerts) : undefined} />
+          <QuickAction icon="wallet" label="Spese" detail={expenseCount > 0 ? formatCurrency(totalSpent) : 'Dividi costi'} onClick={() => navigate('/expenses')} badge={expenseCount > 0 ? String(expenseCount) : undefined} />
+          <QuickAction icon="sparkles" label="TravelG AI" detail="Chiedi ora" onClick={() => navigate('/assistant')} />
+          <QuickAction icon="users" label="Gruppo" detail="Chat e sondaggi" onClick={() => navigate('/trips')} badge={String(activeTrip.travelers)} />
+        </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-[1.35rem] border border-white/80 bg-white/85 px-4 py-3 text-xs shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur">
-        <span className="font-medium text-slate-500">{documentCount} documenti · {expenseCount} spese</span>
-        <button type="button" onClick={() => navigate('/profile')} className="font-extrabold text-blue-600">
-          Preferenze AI →
-        </button>
+        <AutoVisitDetector trip={activeTrip} />
+
+        <div className="mt-5 flex items-center justify-between">
+          <h2 className="text-xl font-black tracking-tight text-slate-950">Il viaggio a colpo d'occhio</h2>
+          <button type="button" onClick={() => navigate('/trips')} className="text-xs font-extrabold text-[#a47724]">Dettagli ›</button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2.5">
+          <button type="button" onClick={onOpenChecklist} className="rounded-[1.35rem] border border-stone-200 bg-white/90 p-4 text-left shadow-sm">
+            <p className="text-sm font-extrabold">Checklist <span className="float-right text-[#a47724]">{progress}%</span></p>
+            <p className="mt-1 text-[11px] text-slate-500">{totalCount === 0 ? 'Nessun elemento' : `${completedCount}/${totalCount} completati`}</p>
+          </button>
+          <button type="button" onClick={() => navigate('/weather')} className="rounded-[1.35rem] border border-stone-200 bg-white/90 p-4 text-left shadow-sm">
+            <p className="text-sm font-extrabold">Meteo <span className="float-right text-[#a47724]">{hasCoordinates ? weatherSummary : '—'}</span></p>
+            <p className="mt-1 text-[11px] text-slate-500">{hasCoordinates ? 'Previsioni del viaggio' : 'Aggiungi la posizione'}</p>
+          </button>
+        </div>
+        <div className="mt-3 flex items-center justify-between rounded-[1.35rem] border border-stone-200 bg-white/80 px-4 py-3 text-xs">
+          <span className="font-medium text-slate-500">{documentCount} documenti · {expenseCount} spese</span>
+          <button type="button" onClick={() => navigate('/profile')} className="font-extrabold text-[#a47724]">Preferenze AI ›</button>
+        </div>
       </div>
     </section>
   )
