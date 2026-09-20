@@ -86,7 +86,6 @@ function QuickAction({
   detail,
   onClick,
   badge,
-  tone,
 }: {
   icon: IconName
   label: string
@@ -173,12 +172,6 @@ export default function HomePage({
       </section>
     )
   }
-
-  const tripState = getTripState(activeTrip)
-  const documentAlerts = expiredDocumentCount + expiringDocumentCount
-  const weatherSummary = weather
-    ? `${Math.round(weather.current.temperature)}°`
-    : 'In aggiornamento'
 
   const tripState = getTripState(activeTrip)
   const documentAlerts = expiredDocumentCount + expiringDocumentCount
