@@ -31,14 +31,6 @@ function todayAtMidnight() {
   return value
 }
 
-function formatToday() {
-  return new Intl.DateTimeFormat('it-IT', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date())
-}
-
 function getTripState(trip: Trip) {
   const start = parseDate(trip.startDate)
   const end = parseDate(trip.endDate)
@@ -134,7 +126,7 @@ export default function HomePage({
   const { completedCount, totalCount, progress } = useChecklist(activeTrip?.id)
   const { documentCount, expiredDocumentCount, expiringDocumentCount } = useDocuments(activeTrip?.id)
   const { expenseCount, totalSpent } = useExpenses(activeTrip?.id, activeTrip?.budget ?? 0)
-  const { activities } = useRoadbook(activeTrip?.id)
+  const { activities } = useRoadbook(activeTrip?.id ?? null)
 
   const latitude = activeTrip?.latitude
   const longitude = activeTrip?.longitude
